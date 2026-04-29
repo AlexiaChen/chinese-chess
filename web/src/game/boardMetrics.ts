@@ -4,8 +4,8 @@ export const BOARD_METRICS = {
   paddingX: 96,
   paddingTop: 98,
   cellX: 82,
-  cellY: 68,
-  riverGap: 86,
+  cellY: 71,
+  riverGap: 59,
   pieceRadius: 28,
 } as const
 

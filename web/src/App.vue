@@ -16,7 +16,7 @@ const humanSide = ref<'w' | 'b'>('w')
 const lastAiReport = ref<AiMoveReport | null>(null)
 const lastAiMoveLabel = ref('')
 
-const AI_MAX_DEPTH = 5
+const AI_MAX_DEPTH = 10
 const AI_TIME_BUDGET_MS = 450
 
 declare global {
@@ -88,7 +88,7 @@ function refreshBridgeStatus() {
   }
 
   if (aiThinking.value) {
-    bridgeStatus.value = `AI 正在思考（深度 ${AI_MAX_DEPTH}，预算 ${AI_TIME_BUDGET_MS}ms）…`
+    bridgeStatus.value = `AI 正在思考（深度 ${AI_MAX_DEPTH}）…`
     return
   }
 
@@ -367,7 +367,7 @@ watchEffect(() => {
               <span
                 class="rounded-full border border-white/10 bg-black/20 px-4 py-2 font-mono text-xs tracking-wide text-stone-300/75"
               >
-                {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH} · ${AI_TIME_BUDGET_MS}ms` : 'AI 已关闭' }}
+                {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH}` : 'AI 已关闭' }}
               </span>
             </div>
 
