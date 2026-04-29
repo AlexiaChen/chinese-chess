@@ -1,5 +1,8 @@
 #include "bridge/browser_session.h"
 
+#include <stdexcept>
+
+#include "engine/search.h"
 #include "engine/uci_codec.h"
 
 namespace chinese_chess::bridge {
@@ -30,6 +33,19 @@ std::vector<std::string> BrowserSession::legal_moves_from(std::string_view squar
 
 bool BrowserSession::apply_move(std::string_view move) {
     return state_.apply_move(engine::from_uci_move(move));
+}
+
+std::string BrowserSession::apply_ai_move(int depth) {
+    const std::optional<Move> best_move = engine::try_find_best_move(state_, depth);
+    if (!best_move.has_value()) {
+        return {};
+    }
+
+    if (!state_.apply_move(*best_move)) {
+        throw std::runtime_error("AI selected an illegal move");
+    }
+
+    return engine::to_uci_move(*best_move);
 }
 
 void BrowserSession::reset() {

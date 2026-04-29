@@ -29,3 +29,11 @@
 - **Evidence**: `web/src/game/boardScene.ts:16`, `web/src/components/PhaserBoard.vue:111`, `web/src/components/PhaserBoard.vue:265`
 - **Confidence**: 9/10
 - **Action**: When adding new browser-side gameplay features, preserve a semantic DOM interaction path alongside the visual canvas path so keyboard users, browser automation, and debugging all hit the same rule engine.
+
+### L-004: [architecture] GitHub Pages AI must live inside the shared C++/WASM core (2026-04-29)
+- **Issue**: #71 — 网页AI对弈的支持
+- **Trigger**: GitHub Pages, WASM, web AI, Pikafish, browser engine, subprocess
+- **Pattern**: The native `PikafishProcess` path depends on `fork`/`exec` and a UCI subprocess, which is not directly available in the browser runtime behind GitHub Pages. Web AI features need to be implemented inside the portable shared core and exposed through the WASM bridge instead of assuming the native engine adapter can be reused.
+- **Evidence**: `src/engine/pikafish_process.cpp:36`, `src/engine/search.cpp:13`, `AGENTS.md:14`
+- **Confidence**: 10/10
+- **Action**: For future web AI, hint, or analysis features, extend the shared C++ core plus WASM exports first; keep native subprocess engines as native-only integrations.

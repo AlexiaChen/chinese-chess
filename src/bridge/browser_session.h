@@ -17,6 +17,7 @@ public:
     [[nodiscard]] std::vector<std::string> legal_moves_from(std::string_view square) const;
 
     bool apply_move(std::string_view move);
+    [[nodiscard]] std::string apply_ai_move(int depth);
     void reset();
 
 private:

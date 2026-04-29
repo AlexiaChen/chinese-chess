@@ -52,6 +52,12 @@ int chinese_chess_apply_move(const char* move) {
     return chinese_chess::bridge::session().apply_move(move) ? 1 : 0;
 }
 
+const char* chinese_chess_apply_ai_move(int depth) {
+    auto& buffer = chinese_chess::bridge::shared_buffer();
+    buffer = chinese_chess::bridge::session().apply_ai_move(depth);
+    return buffer.c_str();
+}
+
 void chinese_chess_reset() {
     chinese_chess::bridge::session().reset();
 }

@@ -11,9 +11,10 @@
 - Current implemented modules:
   - `src/core/game.h/.cpp`: board state, FEN parsing, legal move generation, move application, and check detection
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
+  - `src/engine/search.h/.cpp`: portable Xiangqi search with static evaluation plus minimax/alpha-beta for native and WASM gameplay
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
 - `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine
-- `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `reset`)
+- `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `apply_ai_move`, `reset`)
   - `src/apps/cli/main.cpp`: native CLI target that can print the board or query a configured engine command for `bestmove`
   - `tests/game_tests.cpp`: rules and codec coverage
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
@@ -24,7 +25,7 @@
 - Target architecture remains:
   - native targets for engine/testing on WSL2
   - a WebAssembly target for browser play
-  - a thin browser UI where Phaser renders the board and DOM controls drive moves
+  - a thin browser UI where Phaser renders the board, DOM controls drive moves, and a built-in WASM searcher can answer as the web AI opponent
 
 ## Build & Run
 
@@ -54,4 +55,5 @@
 - The current frontend stack is fixed to Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser per user direction.
 - The current browser/WASM boundary is defined in C++ first; Emscripten tooling is installed locally under `~/.local/emsdk`.
 - Browser interaction is split: Phaser renders the board, a board-positioned DOM overlay handles direct board clicks, and a regular DOM action tray exposes selectable pieces and legal moves for automation.
+- GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - GitHub Pages deployment assumes the repository path base `/chinese-chess/`.

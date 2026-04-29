@@ -2,6 +2,7 @@ export interface BrowserBridge {
   currentFen: () => string
   legalMovesFrom: (square: string) => string[]
   applyMove: (move: string) => boolean
+  applyAiMove: (depth: number) => string | null
   reset: () => void
 }
 
@@ -34,6 +35,9 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
   const applyMove = runtime.cwrap<(move: string) => number>('chinese_chess_apply_move', 'number', [
     'string',
   ])
+  const applyAiMove = runtime.cwrap<(depth: number) => string>('chinese_chess_apply_ai_move', 'string', [
+    'number',
+  ])
   const reset = runtime.cwrap<() => void>('chinese_chess_reset', null, [])
 
   return {
@@ -43,6 +47,10 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
     },
     applyMove(move: string) {
       return applyMove(move) === 1
+    },
+    applyAiMove(depth: number) {
+      const move = applyAiMove(depth)
+      return move.length > 0 ? move : null
     },
     reset,
   }

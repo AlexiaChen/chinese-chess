@@ -19,6 +19,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  interactionLocked: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits<{
@@ -114,6 +118,11 @@ function handlePieceClick(overlay: PieceOverlay) {
     return
   }
 
+  if (props.interactionLocked) {
+    interactionHint.value = 'AI 正在思考，请稍候。'
+    return
+  }
+
   if (!overlay.isActiveSide) {
     interactionHint.value = `当前轮到${sideToMove.value === 'w' ? '红方' : '黑方'}行棋`
     clearSelection(interactionHint.value)
@@ -137,6 +146,11 @@ function handlePieceClick(overlay: PieceOverlay) {
 function handleMoveClick(move: string) {
   if (!props.bridge) {
     interactionHint.value = '棋盘还在加载，请稍候。'
+    return
+  }
+
+  if (props.interactionLocked) {
+    interactionHint.value = 'AI 正在思考，请稍候。'
     return
   }
 
@@ -200,6 +214,18 @@ watch(
   },
   { immediate: true },
 )
+
+watch(
+  () => props.interactionLocked,
+  (locked) => {
+    if (locked) {
+      clearSelection('AI 正在思考，请稍候。')
+      return
+    }
+
+    clearSelection(`当前轮到${sideToMove.value === 'w' ? '红方' : '黑方'}行棋`)
+  },
+)
 </script>
 
 <template>
@@ -215,6 +241,7 @@ watch(
           :key="overlay.key"
           :aria-label="overlay.label"
           :data-square="overlay.square"
+          :disabled="props.interactionLocked"
           class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border transition duration-150"
           :class="
             overlay.isSelected
@@ -234,6 +261,7 @@ watch(
           :key="overlay.move"
           :aria-label="`落子 ${overlay.move}`"
           :data-move="overlay.move"
+          :disabled="props.interactionLocked"
           class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100/80 bg-orange-500/85 text-[0px] shadow-[0_0_0_5px_rgba(249,115,22,0.18)] transition hover:scale-110"
           :style="percentStyle(overlay.file, overlay.rank, '3.8%', '3.4%')"
           @click="handleMoveClick(overlay.move)"
@@ -278,6 +306,7 @@ watch(
             v-for="overlay in pieceOverlays.filter((item) => item.isActiveSide)"
             :key="`action-${overlay.key}`"
             type="button"
+            :disabled="props.interactionLocked"
             class="rounded-full border px-3 py-1.5 text-sm transition"
             :class="
               overlay.isSelected
@@ -306,6 +335,7 @@ watch(
             v-for="overlay in moveOverlays"
             :key="`list-${overlay.move}`"
             type="button"
+            :disabled="props.interactionLocked"
             class="rounded-full border border-amber-300/30 bg-orange-500/15 px-3 py-1.5 font-mono text-sm text-amber-50 transition hover:bg-orange-500/25"
             @click="handleMoveClick(overlay.move)"
           >

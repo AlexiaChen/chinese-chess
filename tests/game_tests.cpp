@@ -1,6 +1,7 @@
 #include "core/game.h"
 #include "bridge/browser_session.h"
 #include "engine/pikafish_process.h"
+#include "engine/search.h"
 #include "engine/uci_codec.h"
 
 #include <algorithm>
@@ -131,6 +132,14 @@ void pikafish_process_adapter_test() {
     engine.stop();
 }
 
+void search_prefers_winning_capture_test() {
+    const GameState game = GameState::from_fen("4k4/9/9/9/4r4/4R4/9/9/9/4K4 w");
+    const Move best_move = chinese_chess::engine::find_best_move(game, 1);
+
+    expect(best_move == Move {Position {4, 5}, Position {4, 4}},
+           "Search should prefer capturing a free rook");
+}
+
 void browser_session_bridge_test() {
     chinese_chess::bridge::BrowserSession session;
 
@@ -143,6 +152,10 @@ void browser_session_bridge_test() {
            "Browser session should expose legal opening soldier move");
     expect(session.apply_move("a3a4"), "Browser session should accept a legal move");
     expect(session.side_to_move() == Side::Black, "Browser session should switch side after applying move");
+
+    const std::string ai_move = session.apply_ai_move(1);
+    expect(!ai_move.empty(), "Browser session should be able to apply an AI move");
+    expect(session.side_to_move() == Side::Red, "AI move should hand control back to the human side");
 }
 
 }  // namespace
@@ -157,6 +170,7 @@ int main() {
     apply_move_switches_side_test();
     uci_codec_round_trip_test();
     pikafish_process_adapter_test();
+    search_prefers_winning_capture_test();
     browser_session_bridge_test();
     return 0;
 }
