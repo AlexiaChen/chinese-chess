@@ -1,8 +1,19 @@
+export interface AiMoveReport {
+  move: string
+  score: number
+  completedDepth: number
+  visitedNodes: number
+  elapsedMs: number
+  principalVariation: string[]
+  timedOut: boolean
+}
+
 export interface BrowserBridge {
   currentFen: () => string
   legalMovesFrom: (square: string) => string[]
   applyMove: (move: string) => boolean
-  applyAiMove: (depth: number) => string | null
+  applyAiMove: (maxDepth: number, timeBudgetMs?: number) => string | null
+  applyAiMoveWithReport: (maxDepth: number, timeBudgetMs: number) => AiMoveReport | null
   reset: () => void
 }
 
@@ -38,6 +49,16 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
   const applyAiMove = runtime.cwrap<(depth: number) => string>('chinese_chess_apply_ai_move', 'string', [
     'number',
   ])
+  const applyAiMoveWithLimits = runtime.cwrap<(maxDepth: number, timeBudgetMs: number) => string>(
+    'chinese_chess_apply_ai_move_with_limits',
+    'string',
+    ['number', 'number'],
+  )
+  const applyAiMoveWithReport = runtime.cwrap<(maxDepth: number, timeBudgetMs: number) => string>(
+    'chinese_chess_apply_ai_move_with_report',
+    'string',
+    ['number', 'number'],
+  )
   const reset = runtime.cwrap<() => void>('chinese_chess_reset', null, [])
 
   return {
@@ -48,9 +69,18 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
     applyMove(move: string) {
       return applyMove(move) === 1
     },
-    applyAiMove(depth: number) {
-      const move = applyAiMove(depth)
+    applyAiMove(maxDepth: number, timeBudgetMs?: number) {
+      const move =
+        timeBudgetMs === undefined ? applyAiMove(maxDepth) : applyAiMoveWithLimits(maxDepth, timeBudgetMs)
       return move.length > 0 ? move : null
+    },
+    applyAiMoveWithReport(maxDepth: number, timeBudgetMs: number) {
+      const raw = applyAiMoveWithReport(maxDepth, timeBudgetMs)
+      if (raw.length === 0) {
+        return null
+      }
+
+      return JSON.parse(raw) as AiMoveReport
     },
     reset,
   }

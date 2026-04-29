@@ -11,15 +11,17 @@
 - Current implemented modules:
   - `src/core/game.h/.cpp`: board state, FEN parsing, legal move generation, move application, and check detection
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
-  - `src/engine/search.h/.cpp`: portable Xiangqi search with static evaluation plus minimax/alpha-beta for native and WASM gameplay
+  - `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, time-budgeted alpha-beta, move ordering, transposition caching, quiescence search, and static evaluation for native/WASM gameplay
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
 - `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine
-- `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `apply_ai_move`, `reset`)
+- `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `reset`)
   - `src/apps/cli/main.cpp`: native CLI target that can print the board or query a configured engine command for `bestmove`
   - `tests/game_tests.cpp`: rules and codec coverage
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
   - `third_party/pikafish`: official Pikafish source as a git submodule
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
+  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, and summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV)
+  - `web/src/components/PhaserBoard.vue`: Phaser board wrapper with DOM piece/move overlays plus SVG path highlighting for the AI's latest move
   - `.github/workflows/ci.yml`: GitHub Actions CI for native tests plus WASM/frontend builds
   - `.github/workflows/pages.yml`: GitHub Pages build and deploy workflow
 - Target architecture remains:
@@ -56,4 +58,6 @@
 - The current browser/WASM boundary is defined in C++ first; Emscripten tooling is installed locally under `~/.local/emsdk`.
 - Browser interaction is split: Phaser renders the board, a board-positioned DOM overlay handles direct board clicks, and a regular DOM action tray exposes selectable pieces and legal moves for automation.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
+- Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
+- Player-facing AI feedback should use summarized search reports from the WASM bridge (last move, eval, completed depth, visited nodes, elapsed time, PV) instead of streaming every explored node to the UI.
 - GitHub Pages deployment assumes the repository path base `/chinese-chess/`.

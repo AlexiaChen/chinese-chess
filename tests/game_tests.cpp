@@ -140,6 +140,37 @@ void search_prefers_winning_capture_test() {
            "Search should prefer capturing a free rook");
 }
 
+void time_budgeted_search_returns_playable_move_test() {
+    const GameState game = GameState::from_fen("4k4/9/9/9/4r4/4R4/9/9/9/4K4 w");
+    const auto best_move = chinese_chess::engine::try_find_best_move(
+        game,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 4,
+            .time_budget_ms = 25,
+        });
+
+    expect(best_move.has_value(), "Time-budgeted search should still return a move");
+    expect(*best_move == Move {Position {4, 5}, Position {4, 4}},
+           "Time-budgeted search should keep obvious tactical wins");
+}
+
+void search_report_exposes_metadata_test() {
+    const GameState game = GameState::from_fen("4k4/9/9/9/4r4/4R4/9/9/9/4K4 w");
+    const auto report = chinese_chess::engine::search_best_move(
+        game,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 4,
+            .time_budget_ms = 25,
+        });
+
+    expect(report.best_move.has_value(), "Search report should contain a best move");
+    expect(*report.best_move == Move {Position {4, 5}, Position {4, 4}},
+           "Search report should expose the same tactical best move");
+    expect(report.completed_depth >= 1, "Search report should record completed depth");
+    expect(report.visited_nodes > 0, "Search report should record visited nodes");
+    expect(report.principal_variation.size() >= 1, "Search report should expose a principal variation");
+}
+
 void browser_session_bridge_test() {
     chinese_chess::bridge::BrowserSession session;
 
@@ -156,6 +187,22 @@ void browser_session_bridge_test() {
     const std::string ai_move = session.apply_ai_move(1);
     expect(!ai_move.empty(), "Browser session should be able to apply an AI move");
     expect(session.side_to_move() == Side::Red, "AI move should hand control back to the human side");
+
+    session.reset();
+    expect(session.apply_move("a3a4"), "Browser session should still accept a legal move after reset");
+    const std::string stronger_ai_move = session.apply_ai_move_with_limits(4, 25);
+    expect(!stronger_ai_move.empty(), "Budgeted browser AI should still produce a move");
+    expect(session.side_to_move() == Side::Red,
+           "Budgeted browser AI move should return control to the human side");
+
+    session.reset();
+    expect(session.apply_move("a3a4"), "Browser session should accept a legal move before reporting AI metadata");
+    const auto ai_report = session.apply_ai_move_with_report(4, 25);
+    expect(!ai_report.move.empty(), "Browser session AI report should include the applied move");
+    expect(ai_report.completed_depth >= 1, "Browser session AI report should include completed depth");
+    expect(ai_report.visited_nodes > 0, "Browser session AI report should include visited nodes");
+    expect(!ai_report.principal_variation.empty(),
+           "Browser session AI report should include a principal variation");
 }
 
 }  // namespace
@@ -171,6 +218,8 @@ int main() {
     uci_codec_round_trip_test();
     pikafish_process_adapter_test();
     search_prefers_winning_capture_test();
+    time_budgeted_search_returns_playable_move_test();
+    search_report_exposes_metadata_test();
     browser_session_bridge_test();
     return 0;
 }

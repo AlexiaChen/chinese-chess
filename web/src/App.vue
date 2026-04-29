@@ -1,30 +1,34 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch, watchEffect } from 'vue'
 
-import type { BrowserBridge } from './bridge/wasmBridge'
+import type { AiMoveReport, BrowserBridge } from './bridge/wasmBridge'
 import { createWasmBridge } from './bridge/wasmBridge'
 import PhaserBoard from './components/PhaserBoard.vue'
-import { INITIAL_FEN, sideLabel } from './game/fen'
+import { INITIAL_FEN, parseFen, pieceDisplayName, sideLabel } from './game/fen'
 
 const currentFen = ref(INITIAL_FEN)
 const resetKey = ref(0)
 const bridge = ref<BrowserBridge | null>(null)
 const bridgeStatus = ref('棋盘正在加载，请稍候…')
-const moveHistory = ref<string[]>([])
 const aiEnabled = ref(true)
 const aiThinking = ref(false)
+const humanSide = ref<'w' | 'b'>('w')
+const lastAiReport = ref<AiMoveReport | null>(null)
+const lastAiMoveLabel = ref('')
 
-const AI_SEARCH_DEPTH = 2
-const AI_SIDE = 'b'
+const AI_MAX_DEPTH = 5
+const AI_TIME_BUDGET_MS = 450
 
 declare global {
   interface Window {
     __CHINESE_CHESS_TEST_API__?: {
       applyMove: (move: string) => boolean
-      applyAiMove: (depth: number) => string | null
+      applyAiMove: (maxDepth: number, timeBudgetMs?: number) => string | null
+      applyAiMoveWithReport: (maxDepth: number, timeBudgetMs: number) => AiMoveReport | null
       currentFen: () => string
       legalMovesFrom: (square: string) => string[]
       setAiEnabled: (enabled: boolean) => void
+      setHumanSide: (side: 'w' | 'b') => void
       reset: () => void
     }
   }
@@ -32,12 +36,50 @@ declare global {
 
 const activeSideToken = computed(() => currentFen.value.split(' ')[1] ?? 'w')
 const activeSide = computed(() => sideLabel(activeSideToken.value))
-const modeLabel = computed(() => (aiEnabled.value ? '人机对弈（AI 执黑）' : '双人对弈'))
+const aiSide = computed(() => (humanSide.value === 'w' ? 'b' : 'w'))
+const humanTurn = computed(() => activeSideToken.value === humanSide.value)
+const interactionLocked = computed(() => aiThinking.value || (aiEnabled.value && !humanTurn.value))
+const modeLabel = computed(() => {
+  if (!aiEnabled.value) {
+    return '双人对弈'
+  }
+
+  return humanSide.value === 'w' ? '我执红，AI 执黑' : 'AI 执红，我执黑'
+})
+const aiEvalLabel = computed(() => {
+  if (!lastAiReport.value) {
+    return '—'
+  }
+
+  const score = lastAiReport.value.score / 100
+  return `${score >= 0 ? '+' : ''}${score.toFixed(2)}`
+})
+const aiPvLabel = computed(() =>
+  lastAiReport.value?.principalVariation.length
+    ? lastAiReport.value.principalVariation.join(' ')
+    : '等待 AI 落子后显示',
+)
 const setupTips: string[] = [
-  '红方先行，先点击己方棋子，再选择落点。',
-  '棋盘下方会显示当前可走的棋子和合法着法。',
-  '默认是人机对弈，AI 执黑；也可以随时关闭 AI 切回双人对弈。',
+  '支持选择我先或 AI 先，开局会自动按选定方落子。',
+  'AI 上一步会在棋盘上高亮路径，并在侧边栏展示评估、深度、节点数与主变化线。',
+  '关闭 AI 后仍可作为双人对弈棋盘使用。',
 ]
+
+function describeAiMove(fenBeforeMove: string, move: string): string {
+  const fromSquare = move.slice(0, 2)
+  const toSquare = move.slice(2, 4)
+  const position = parseFen(fenBeforeMove)
+  const file = fromSquare.charCodeAt(0) - 'a'.charCodeAt(0)
+  const rank = 9 - Number(fromSquare[1])
+  const piece = position.board[rank * 9 + file]
+
+  if (!piece) {
+    return `${fromSquare} → ${toSquare}`
+  }
+
+  const pieceSide = piece === piece.toUpperCase() ? '红方' : '黑方'
+  return `${pieceSide}${pieceDisplayName(piece)} ${fromSquare} → ${toSquare}`
+}
 
 function refreshBridgeStatus() {
   if (!bridge.value) {
@@ -46,7 +88,7 @@ function refreshBridgeStatus() {
   }
 
   if (aiThinking.value) {
-    bridgeStatus.value = `AI 正在思考（深度 ${AI_SEARCH_DEPTH}）…`
+    bridgeStatus.value = `AI 正在思考（深度 ${AI_MAX_DEPTH}，预算 ${AI_TIME_BUDGET_MS}ms）…`
     return
   }
 
@@ -55,51 +97,64 @@ function refreshBridgeStatus() {
     return
   }
 
-  if (activeSideToken.value === AI_SIDE) {
-    bridgeStatus.value = '轮到 AI 行棋。'
+  if (activeSideToken.value === aiSide.value) {
+    bridgeStatus.value = humanSide.value === 'w' ? '轮到 AI 行棋。' : 'AI 正在准备先手。'
     return
   }
 
-  bridgeStatus.value = '棋盘已准备好，你执红先行。'
+  if (lastAiMoveLabel.value) {
+    bridgeStatus.value = `AI 刚走 ${lastAiMoveLabel.value}`
+    return
+  }
+
+  bridgeStatus.value = humanSide.value === 'w' ? '棋盘已准备好，你执红先行。' : '棋盘已准备好，AI 执红先行。'
 }
 
 async function maybeRunAiTurn() {
-  if (!bridge.value || !aiEnabled.value || aiThinking.value || activeSideToken.value !== AI_SIDE) {
+  if (!bridge.value || !aiEnabled.value || aiThinking.value || activeSideToken.value !== aiSide.value) {
     return
   }
 
+  const fenBeforeAiMove = currentFen.value
   aiThinking.value = true
   refreshBridgeStatus()
   await nextTick()
 
-  const aiMove = bridge.value.applyAiMove(AI_SEARCH_DEPTH)
+  const aiReport = bridge.value.applyAiMoveWithReport(AI_MAX_DEPTH, AI_TIME_BUDGET_MS)
   aiThinking.value = false
 
-  if (!aiMove) {
+  if (!aiReport) {
     bridgeStatus.value = 'AI 当前无合法着法，对局结束。'
     return
   }
 
+  lastAiReport.value = aiReport
+  lastAiMoveLabel.value = describeAiMove(fenBeforeAiMove, aiReport.move)
   currentFen.value = bridge.value.currentFen()
-  moveHistory.value = [...moveHistory.value, aiMove].slice(-8)
-  bridgeStatus.value = `AI 已落子 ${aiMove}，轮到你继续。`
+  bridgeStatus.value = `AI 已落子 ${lastAiMoveLabel.value}`
 }
 
 function resetBoard() {
   aiThinking.value = false
+  lastAiReport.value = null
+  lastAiMoveLabel.value = ''
   if (bridge.value) {
     bridge.value.reset()
     currentFen.value = bridge.value.currentFen()
   } else {
     currentFen.value = INITIAL_FEN
   }
-  moveHistory.value = []
   resetKey.value += 1
   refreshBridgeStatus()
 }
 
 function setAiEnabled(enabled: boolean) {
   aiEnabled.value = enabled
+}
+
+function setHumanSide(side: 'w' | 'b') {
+  humanSide.value = side
+  resetBoard()
 }
 
 function toggleAi() {
@@ -117,12 +172,12 @@ onMounted(async () => {
   }
 })
 
-watch([currentFen, aiEnabled, bridge], () => {
+watch([currentFen, aiEnabled, bridge, humanSide], () => {
   if (!bridge.value) {
     return
   }
 
-  if (aiEnabled.value && activeSideToken.value === AI_SIDE && !aiThinking.value) {
+  if (aiEnabled.value && activeSideToken.value === aiSide.value && !aiThinking.value) {
     void maybeRunAiTurn()
     return
   }
@@ -142,24 +197,39 @@ watchEffect(() => {
       const applied = bridge.value.applyMove(move)
       if (applied) {
         currentFen.value = bridge.value.currentFen()
-        moveHistory.value = [...moveHistory.value, move].slice(-8)
       }
       return applied
     },
-    applyAiMove(depth: number) {
+    applyAiMove(maxDepth: number, timeBudgetMs?: number) {
       if (!bridge.value) {
         return null
       }
 
-      const move = bridge.value.applyAiMove(depth)
+      const move = bridge.value.applyAiMove(maxDepth, timeBudgetMs)
       if (!move) {
         return null
       }
 
+      lastAiMoveLabel.value = move
       currentFen.value = bridge.value.currentFen()
-      moveHistory.value = [...moveHistory.value, move].slice(-8)
       refreshBridgeStatus()
       return move
+    },
+    applyAiMoveWithReport(maxDepth: number, timeBudgetMs: number) {
+      if (!bridge.value) {
+        return null
+      }
+
+      const report = bridge.value.applyAiMoveWithReport(maxDepth, timeBudgetMs)
+      if (!report) {
+        return null
+      }
+
+      lastAiReport.value = report
+      lastAiMoveLabel.value = report.move
+      currentFen.value = bridge.value.currentFen()
+      refreshBridgeStatus()
+      return report
     },
     currentFen() {
       return currentFen.value
@@ -169,6 +239,9 @@ watchEffect(() => {
     },
     setAiEnabled(enabled: boolean) {
       setAiEnabled(enabled)
+    },
+    setHumanSide(side: 'w' | 'b') {
+      setHumanSide(side)
     },
     reset() {
       resetBoard()
@@ -216,9 +289,9 @@ watchEffect(() => {
 
             <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-2">
               <div class="rounded-[22px] border border-white/10 bg-white/[0.06] px-4 py-4">
-                <span
-                  class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
-                >
+              <span
+                class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
+              >
                 当前走方
               </span>
               <strong class="mt-2 block font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-2xl">
@@ -234,6 +307,45 @@ watchEffect(() => {
                 <strong class="mt-2 block font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-2xl">
                   {{ modeLabel }}
                 </strong>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-[24px] border border-white/10 bg-white/[0.05] px-4 py-4">
+              <div class="flex items-center justify-between gap-3">
+                <span
+                  class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
+                >
+                  开局先手
+                </span>
+                <span class="font-mono text-xs text-stone-400/70">
+                  {{ humanSide === 'w' ? '我执红' : 'AI 执红' }}
+                </span>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="rounded-full border px-4 py-2 text-sm transition"
+                  :class="
+                    humanSide === 'w'
+                      ? 'border-amber-300/35 bg-amber-400/15 text-amber-50'
+                      : 'border-white/10 bg-black/20 text-stone-200/85 hover:border-amber-200/35 hover:bg-white/[0.06]'
+                  "
+                  @click="setHumanSide('w')"
+                >
+                  我先（执红）
+                </button>
+                <button
+                  type="button"
+                  class="rounded-full border px-4 py-2 text-sm transition"
+                  :class="
+                    humanSide === 'b'
+                      ? 'border-amber-300/35 bg-amber-400/15 text-amber-50'
+                      : 'border-white/10 bg-black/20 text-stone-200/85 hover:border-amber-200/35 hover:bg-white/[0.06]'
+                  "
+                  @click="setHumanSide('b')"
+                >
+                  AI先（AI执红）
+                </button>
               </div>
             </div>
 
@@ -255,7 +367,7 @@ watchEffect(() => {
               <span
                 class="rounded-full border border-white/10 bg-black/20 px-4 py-2 font-mono text-xs tracking-wide text-stone-300/75"
               >
-                {{ aiEnabled ? `AI 深度 ${AI_SEARCH_DEPTH}` : 'AI 已关闭' }}
+                {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH} · ${AI_TIME_BUDGET_MS}ms` : 'AI 已关闭' }}
               </span>
             </div>
 
@@ -263,20 +375,52 @@ watchEffect(() => {
             <div
               class="mb-3 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[12px] uppercase tracking-[0.26em] text-stone-300/70"
             >
-              开始之前
+              AI 洞察
             </div>
-            <ul class="grid gap-3">
-              <li
-                v-for="item in setupTips"
-                :key="item"
-                class="relative rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4 pl-12 leading-7 text-stone-200/90"
-              >
-                <span
-                  class="absolute left-4 top-[18px] h-4 w-4 rounded-full bg-[linear-gradient(180deg,#e0a463,#b74b21)] shadow-[0_0_0_6px_rgba(212,106,49,0.12)]"
-                ></span>
-                {{ item }}
-              </li>
-            </ul>
+            <div class="grid gap-3">
+              <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4 leading-7 text-stone-200/90">
+                <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">AI 上一步</div>
+                <div class="mt-2 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-lg text-stone-50">
+                  {{ lastAiMoveLabel || '等待 AI 落子' }}
+                </div>
+              </div>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4">
+                  <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">AI 评估</div>
+                  <div class="mt-2 font-mono text-2xl text-amber-100">{{ aiEvalLabel }}</div>
+                </div>
+                <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4">
+                  <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">完成深度</div>
+                  <div class="mt-2 font-mono text-2xl text-amber-100">
+                    {{ lastAiReport?.completedDepth ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4">
+                  <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">搜索节点</div>
+                  <div class="mt-2 font-mono text-lg text-stone-50">
+                    {{ lastAiReport?.visitedNodes?.toLocaleString() ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4">
+                  <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">耗时</div>
+                  <div class="mt-2 font-mono text-lg text-stone-50">
+                    {{ lastAiReport ? `${lastAiReport.elapsedMs}ms` : '—' }}
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4 leading-7 text-stone-200/90">
+                <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">主变化线</div>
+                <div class="mt-2 break-words font-mono text-sm text-amber-100/90">
+                  {{ aiPvLabel }}
+                </div>
+              </div>
+              <div class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4 leading-7 text-stone-200/90">
+                <div class="text-[11px] uppercase tracking-[0.24em] text-stone-400/70">开始之前</div>
+                <ul class="mt-2 grid gap-2">
+                  <li v-for="item in setupTips" :key="item">{{ item }}</li>
+                </ul>
+              </div>
+            </div>
           </section>
         </div>
       </aside>
@@ -295,8 +439,8 @@ watchEffect(() => {
             <p class="leading-8 text-stone-300/80">
               {{
                 aiEnabled
-                  ? '你执红先行；每次你落子后，AI 会自动以黑方应手。'
-                  : '点击棋盘上的己方棋子后，再点击高亮落点，或者使用棋盘下方的操作按钮完成走子。'
+                  ? '选择开局先手后开始对弈；AI 的路径、评估值和搜索摘要会实时显示在左侧。'
+                  : '点击棋盘上的己方棋子后，再点击高亮落点完成双人对弈。'
               }}
             </p>
           </header>
@@ -304,44 +448,11 @@ watchEffect(() => {
             <PhaserBoard
               :bridge="bridge"
               :fen="currentFen"
-              :interaction-locked="aiThinking"
+              :highlight-move="lastAiReport?.move || undefined"
+              :interaction-locked="interactionLocked"
               :reset-key="resetKey"
               @fen-change="currentFen = $event"
-              @move-applied="moveHistory = [...moveHistory, $event].slice(-8)"
             />
-
-          <section
-            class="mt-5 rounded-[24px] border border-white/10 bg-black/20 px-4 py-4"
-          >
-            <div class="flex items-center justify-between gap-3">
-              <span
-                class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
-              >
-                最近着法
-              </span>
-              <span class="text-sm text-stone-300/60">
-                {{ moveHistory.length === 0 ? '等待落子' : `共 ${moveHistory.length} 步` }}
-              </span>
-            </div>
-
-            <div
-              class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4"
-            >
-              <div
-                v-for="move in moveHistory"
-                :key="move"
-                class="rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2 text-center font-mono text-sm tracking-wide text-amber-100/80"
-              >
-                {{ move }}
-              </div>
-              <div
-                v-if="moveHistory.length === 0"
-                class="rounded-2xl border border-dashed border-white/10 px-3 py-3 text-center text-sm text-stone-400/70 md:col-span-2 xl:col-span-4"
-              >
-                先点击己方棋子，再选择一个合法落点开始对弈。
-              </div>
-            </div>
-          </section>
         </div>
       </main>
     </div>

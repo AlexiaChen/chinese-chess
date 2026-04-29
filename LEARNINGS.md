@@ -37,3 +37,11 @@
 - **Evidence**: `src/engine/pikafish_process.cpp:36`, `src/engine/search.cpp:13`, `AGENTS.md:14`
 - **Confidence**: 10/10
 - **Action**: For future web AI, hint, or analysis features, extend the shared C++ core plus WASM exports first; keep native subprocess engines as native-only integrations.
+
+### L-005: [gotcha] Browser-side search timeouts should not rely on exception-based control flow in WASM (2026-04-29)
+- **Issue**: #72 — 增强AI棋力
+- **Trigger**: WASM, timeout, browser AI, search budget, exception, memory access out of bounds
+- **Pattern**: Native builds tolerated exception-based timeout control inside the searcher, but the browser WASM path turned that internal control flow into a runtime failure. Budgeted browser search is safer when timeout/cancel logic propagates via explicit state and return paths instead of throwing as part of normal search control.
+- **Evidence**: `src/engine/search.cpp:35`, `src/engine/search.cpp:151`, `src/engine/search.cpp:307`
+- **Confidence**: 10/10
+- **Action**: For future WASM search budgets, cancellation, or interruption support, prefer explicit flags and bounded return paths over exception-driven control flow.

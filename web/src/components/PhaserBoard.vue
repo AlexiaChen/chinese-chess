@@ -23,6 +23,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  highlightMove: {
+    type: String,
+    default: null,
+  },
 })
 
 const emit = defineEmits<{
@@ -52,6 +56,16 @@ type MoveOverlay = {
   target: string
   file: number
   rank: number
+}
+
+type HighlightOverlay = {
+  move: string
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+  from: string
+  to: string
 }
 
 const sideToMove = computed(() => parseFen(props.fen).sideToMove)
@@ -95,6 +109,27 @@ const moveOverlays = computed<MoveOverlay[]>(() =>
     }
   }),
 )
+
+const highlightOverlay = computed<HighlightOverlay | null>(() => {
+  if (!props.highlightMove) {
+    return null
+  }
+
+  const from = props.highlightMove.slice(0, 2)
+  const to = props.highlightMove.slice(2, 4)
+  const fromPoint = pointFor(from.charCodeAt(0) - 'a'.charCodeAt(0), 9 - Number(from[1]))
+  const toPoint = pointFor(to.charCodeAt(0) - 'a'.charCodeAt(0), 9 - Number(to[1]))
+
+  return {
+    move: props.highlightMove,
+    fromX: fromPoint.x,
+    fromY: fromPoint.y,
+    toX: toPoint.x,
+    toY: toPoint.y,
+    from,
+    to,
+  }
+})
 
 function percentStyle(file: number, rank: number, widthPercent: string, heightPercent: string) {
   const point = pointFor(file, rank)
@@ -235,6 +270,39 @@ watch(
     <div class="relative mx-auto w-full max-w-[860px] overflow-hidden rounded-[24px]">
       <div ref="container" class="min-h-[480px] w-full overflow-hidden rounded-[24px]"></div>
 
+      <svg
+        v-if="highlightOverlay"
+        class="pointer-events-none absolute inset-0 z-[5] h-full w-full"
+        :viewBox="`0 0 ${BOARD_METRICS.width} ${BOARD_METRICS.height}`"
+      >
+        <line
+          :x1="highlightOverlay.fromX"
+          :y1="highlightOverlay.fromY"
+          :x2="highlightOverlay.toX"
+          :y2="highlightOverlay.toY"
+          stroke="rgba(245, 158, 11, 0.95)"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-dasharray="18 14"
+        />
+        <circle
+          :cx="highlightOverlay.fromX"
+          :cy="highlightOverlay.fromY"
+          r="24"
+          fill="rgba(245, 158, 11, 0.18)"
+          stroke="rgba(252, 211, 77, 0.95)"
+          stroke-width="4"
+        />
+        <circle
+          :cx="highlightOverlay.toX"
+          :cy="highlightOverlay.toY"
+          r="24"
+          fill="rgba(249, 115, 22, 0.28)"
+          stroke="rgba(254, 215, 170, 0.95)"
+          stroke-width="4"
+        />
+      </svg>
+
       <div class="absolute inset-0 z-10">
         <button
           v-for="overlay in pieceOverlays"
@@ -290,62 +358,5 @@ watch(
       </div>
     </div>
 
-    <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-      <section class="rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-4">
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <h3 class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-sm tracking-[0.18em] text-stone-200/85">
-            当前可选棋子
-          </h3>
-          <span class="font-mono text-xs text-stone-400/70">
-            {{ sideToMove === 'w' ? '红方' : '黑方' }}
-          </span>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="overlay in pieceOverlays.filter((item) => item.isActiveSide)"
-            :key="`action-${overlay.key}`"
-            type="button"
-            :disabled="props.interactionLocked"
-            class="rounded-full border px-3 py-1.5 text-sm transition"
-            :class="
-              overlay.isSelected
-                ? 'border-amber-300/40 bg-amber-400/15 text-amber-50'
-                : 'border-white/10 bg-black/20 text-stone-200/85 hover:border-amber-200/35 hover:bg-white/[0.06]'
-            "
-            @click="handlePieceClick(overlay)"
-          >
-            {{ pieceDisplayName(overlay.piece) }} {{ overlay.square }}
-          </button>
-        </div>
-      </section>
-
-      <section class="rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-4">
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <h3 class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-sm tracking-[0.18em] text-stone-200/85">
-            当前合法着法
-          </h3>
-          <span class="font-mono text-xs text-stone-400/70">
-            {{ selectedSquare ?? '未选子' }}
-          </span>
-        </div>
-
-        <div v-if="moveOverlays.length > 0" class="flex flex-wrap gap-2">
-          <button
-            v-for="overlay in moveOverlays"
-            :key="`list-${overlay.move}`"
-            type="button"
-            :disabled="props.interactionLocked"
-            class="rounded-full border border-amber-300/30 bg-orange-500/15 px-3 py-1.5 font-mono text-sm text-amber-50 transition hover:bg-orange-500/25"
-            @click="handleMoveClick(overlay.move)"
-          >
-            {{ overlay.move }}
-          </button>
-        </div>
-        <p v-else class="text-sm leading-7 text-stone-300/70">
-          先选择一个己方棋子，再从这里确认落点。
-        </p>
-      </section>
-    </div>
   </section>
 </template>
