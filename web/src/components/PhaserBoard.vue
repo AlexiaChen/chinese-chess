@@ -110,7 +110,7 @@ function clearSelection(hint = '请选择当前走方的棋子') {
 
 function handlePieceClick(overlay: PieceOverlay) {
   if (!props.bridge) {
-    interactionHint.value = 'WASM 规则核心尚未连接'
+    interactionHint.value = '棋盘还在加载，请稍候。'
     return
   }
 
@@ -136,7 +136,7 @@ function handlePieceClick(overlay: PieceOverlay) {
 
 function handleMoveClick(move: string) {
   if (!props.bridge) {
-    interactionHint.value = 'WASM 规则核心尚未连接'
+    interactionHint.value = '棋盘还在加载，请稍候。'
     return
   }
 
@@ -193,7 +193,7 @@ watch(
   (bridge) => {
     boardGame?.setBridge(bridge)
     if (!bridge) {
-      clearSelection('WASM 规则核心尚未连接')
+      clearSelection('棋盘还在加载，请稍候。')
     } else {
       clearSelection(`当前轮到${sideToMove.value === 'w' ? '红方' : '黑方'}行棋`)
     }

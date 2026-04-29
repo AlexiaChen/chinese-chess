@@ -18,7 +18,7 @@ interface EmscriptenModuleFactory {
 }
 
 export async function createWasmBridge(): Promise<BrowserBridge> {
-  const wasmEntrypoint = '/wasm/chinese_chess_wasm.js'
+  const wasmEntrypoint = `${import.meta.env.BASE_URL}wasm/chinese_chess_wasm.js`
   const moduleFactory = (await import(
     /* @vite-ignore */ wasmEntrypoint
   )) as EmscriptenModuleFactory

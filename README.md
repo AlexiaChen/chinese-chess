@@ -1,232 +1,163 @@
-# 中国象棋 / Chinese Chess
+# 中国象棋 Chinese Chess
 
-一款运行在浏览器里的中国象棋游戏，用 C++ 规则引擎（编译为 WebAssembly）驱动棋局逻辑，配合 [Pikafish](https://github.com/official-pikafish/Pikafish) 象棋 AI 引擎，前端使用 Vue 3 + Phaser 渲染。
+在浏览器里下象棋。规则引擎用 C++ 编写并编译为 WebAssembly，棋盘渲染使用 Phaser，界面框架使用 Vue 3 + TypeScript + Tailwind CSS。
 
-**🌐 在线体验：[alexiachen.github.io/chinese-chess](https://alexiachen.github.io/chinese-chess)**
+**🎮 [立即在线游玩 →](https://alexiachen.github.io/chinese-chess/)**
 
 ---
 
 ## 功能特性
 
-- 完整的象棋规则核心（C++ 实现）
-  - FEN 解析与序列化（兼容 Pikafish）
-  - 全棋种合法走法生成
-  - 将军检测、将帅对面规则、蹩腿马、塞象眼、隔山炮等
-- 浏览器内 WebAssembly 规则引擎，无需后端
-- Pikafish AI 引擎（官方象棋 AI，基于 Stockfish 改造）
-- Vue 3 + Phaser 5 渲染棋盘，Tailwind CSS 布局
-- 可直接在浏览器 DevTools 中测试的 JS API
-- GitHub Actions 自动构建 + 部署到 GitHub Pages
+- ✅ 完整象棋规则：将帅、士象、车马炮兵全部兵种，将军检测，将帅照面限制
+- ✅ C++ 规则引擎编译为 WASM，在浏览器中零服务端运行
+- ✅ Phaser 渲染棋盘，点击选子 + 高亮合法落点
+- ✅ 支持 Pikafish 引擎（本地原生模式）
+- ✅ 走棋历史记录，FEN 实时显示
 
 ---
 
-## 技术栈
+## 本地运行（最快路径）
 
-| 层 | 技术 |
-|---|---|
-| 规则引擎 | C++17，CMake |
-| AI 引擎 | [Pikafish](https://github.com/official-pikafish/Pikafish)（git 子模块）|
-| WASM 构建 | Emscripten |
-| 前端框架 | Vue 3 + TypeScript |
-| 打包工具 | Vite |
-| CSS | Tailwind CSS |
-| 棋盘渲染 | Phaser 3 |
-| CI/CD | GitHub Actions |
+### 前提条件
 
----
+| 工具 | 版本要求 |
+|------|---------|
+| CMake | ≥ 3.20 |
+| C++ 编译器 | 支持 C++20（GCC 11+、Clang 13+） |
+| Node.js | ≥ 22 |
+| Emscripten | 任意新版本（仅构建 WASM 时需要） |
+| Python 3 | 任意版本（仅运行测试 fixture 时需要） |
 
-## 前置依赖
-
-在开始之前，请确认你的环境里已有：
-
-| 工具 | 说明 |
-|---|---|
-| `git` | 拉取代码和子模块 |
-| `cmake` ≥ 3.20 | 构建 C++ 核心 |
-| `make` | 便捷命令入口 |
-| `g++` / `clang++` | C++17 编译器 |
-| `python3` | 运行测试夹具（`fake_uci_engine.py`）|
-| `node` ≥ 18 + `npm` | 前端构建 |
-| [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) | 编译 WASM（仅 WASM 构建需要）|
-
----
-
-## 快速开始：在本地跑起来
-
-### 第一步：克隆仓库
+### 1. 克隆仓库
 
 ```bash
 git clone --recursive https://github.com/AlexiaChen/chinese-chess.git
 cd chinese-chess
 ```
 
-如果已经 clone 但忘了加 `--recursive`：
+如果已经克隆但忘了 `--recursive`：
 
 ```bash
 git submodule update --init --depth 1 third_party/pikafish
 ```
 
-### 第二步：构建 WASM 规则引擎
+### 2. 构建 WASM 桥接层
 
-> 首次构建需要 Emscripten。如果你还没装，参考 [官方安装说明](https://emscripten.org/docs/getting_started/downloads.html)。
+浏览器版本依赖 WASM 来运行 C++ 规则引擎。请先安装 [Emscripten](https://emscripten.org/docs/getting_started/downloads.html)，然后：
 
 ```bash
 make wasm
 ```
 
-这会把 `chinese_chess_wasm.js` 和 `chinese_chess_wasm.wasm` 输出到 `web/public/wasm/`，前端会自动加载。
+这会生成 `web/public/wasm/chinese_chess_wasm.js` 和 `.wasm`。
 
-### 第三步：安装前端依赖
-
-```bash
-make web-install
-```
-
-### 第四步：启动开发服务器
+### 3. 启动前端开发服务器
 
 ```bash
-make web-dev
+make web-install   # 首次运行，安装 npm 依赖
+make web-dev       # 启动 Vite 开发服务器
 ```
 
-浏览器打开 [http://localhost:5173](http://localhost:5173)，即可开始下棋。
+打开浏览器访问 **http://localhost:5173**，即可开始下棋。
 
 ---
 
-## 完整构建指南
+## 所有构建命令
 
-### 原生 C++ 测试（不需要 Emscripten）
+```
+make help          # 查看所有可用命令
+make test          # 构建 C++ 并运行全套测试
+make wasm          # 构建 WebAssembly 桥接层
+make web-install   # 安装前端 npm 依赖
+make web-dev       # 启动前端开发服务器（热重载）
+make web-build     # 构建生产版前端包
+make web-preview   # 本地预览生产包（http://localhost:4173）
+make pages-build   # 构建 GitHub Pages 版（带 /chinese-chess/ 前缀）
+make pikafish      # 构建 Pikafish 引擎（可选，仅本地原生模式）
+make engine-smoke  # 用 Pikafish 引擎做快速冒烟测试
+make clean         # 清除所有构建产物
+```
+
+---
+
+## 运行测试
 
 ```bash
 make test
 ```
 
-这会依次执行：CMake 配置 → 编译 → CTest 运行。如果你想分步执行：
-
-```bash
-make configure   # cmake -S . -B build
-make build       # cmake --build build
-make test        # ctest --test-dir build --output-on-failure
-```
-
-### 编译 Pikafish AI 引擎（可选，本地 AI 对弈用）
-
-```bash
-make pikafish
-```
-
-如需指定架构（默认自动检测）：
-
-```bash
-PIKAFISH_ARCH=x86-64 make pikafish
-```
-
-### 验证 AI 引擎是否工作
-
-```bash
-make engine-smoke
-```
-
-成功输出示例：`bestmove b0c2`
-
-如果 Pikafish 还没编译，想先用假引擎快速验证适配层：
-
-```bash
-make fake-engine-smoke
-```
-
-### 构建生产前端包
-
-```bash
-make web-build
-```
-
-### 预览生产包（本地）
-
-```bash
-make web-preview
-# 打开 http://127.0.0.1:4173
-```
+这会用 CMake 配置项目、编译 C++ 核心和测试，并通过 CTest 运行全套测试。
+当前测试覆盖：规则引擎走法合法性、将军检测、UCI 编解码、WASM 桥接层。
 
 ---
 
-## 所有 make 目标一览
+## 使用 Pikafish 引擎（可选）
 
-```
-make help
+Pikafish 是专为中国象棋设计的强力引擎（基于 Stockfish 改造）。它以 git 子模块的形式包含在本仓库中。
+
+```bash
+make pikafish      # 编译引擎（约需 2-5 分钟）
+make engine-smoke  # 让引擎分析开局并返回最佳走法
 ```
 
-| 目标 | 功能 |
-|---|---|
-| `make configure` | CMake 配置 |
-| `make build` | 编译原生目标 |
-| `make test` | 运行测试套件 |
-| `make native-cli` | 运行原生 CLI |
-| `make fake-engine-smoke` | 用假 UCI 引擎测试适配层 |
-| `make pikafish` | 编译内置 Pikafish 子模块 |
-| `make engine-smoke` | 用真实 Pikafish 验证 |
-| `make wasm` | 编译 WebAssembly 桥接模块 |
-| `make web-install` | 安装前端 npm 依赖 |
-| `make web-dev` | 启动 Vite 开发服务器 |
-| `make web-build` | 构建生产前端包 |
-| `make web-preview` | 本地预览生产包 |
-| `make web-bundle` | 通过 CMake 构建前端包 |
-| `make pages-build` | 构建 GitHub Pages 部署包 |
-| `make clean` | 清除构建产物 |
+注意：Pikafish 当前仅用于本地原生模式（CLI 和未来的人机对战功能）。浏览器版本使用纯 WASM 规则引擎，不调用 Pikafish。
 
 ---
 
-## 项目结构
+## 项目架构
 
 ```
 chinese-chess/
 ├── src/
-│   ├── core/              # C++ 象棋规则引擎（FEN、走法生成、将军检测）
-│   ├── engine/            # UCI 协议编解码器、Pikafish 子进程适配器
-│   ├── bridge/            # 浏览器/WASM C ABI 桥接层
-│   └── apps/cli/          # 原生 CLI 入口
-├── tests/
-│   ├── game_tests.cpp     # 规则引擎单元测试
-│   └── fixtures/          # 测试夹具（fake UCI 引擎）
-├── web/                   # Vue 3 + Vite + Phaser 前端
+│   ├── core/          # C++ 象棋规则引擎（走法生成、将军检测、FEN 解析）
+│   ├── engine/        # UCI 进程适配器 + Pikafish 坐标编解码
+│   ├── bridge/        # 浏览器会话层 + WASM C ABI 导出
+│   └── apps/cli/      # 本地命令行界面（测试/调试用）
+├── web/               # Vue 3 + Vite + TypeScript + Tailwind + Phaser 前端
 │   ├── src/
-│   │   ├── App.vue        # 主页面组件（状态管理、WASM 加载）
-│   │   ├── components/    # Phaser 棋盘组件
-│   │   ├── game/          # 棋盘场景、FEN 工具
-│   │   └── bridge/        # WASM 运行时桥接
-│   └── public/wasm/       # 编译好的 WASM 产物（构建后生成，已 gitignore）
-├── third_party/pikafish/  # Pikafish AI 引擎（git 子模块）
-├── scripts/               # 构建辅助脚本
-├── .github/workflows/     # CI 和 Pages 部署 workflow
-└── Makefile               # 统一构建入口
+│   │   ├── bridge/    # 动态加载 WASM 模块的 TypeScript 桥接层
+│   │   ├── game/      # Phaser 场景 + FEN 工具函数
+│   │   └── components/# Vue 组件（棋盘、布局）
+│   └── public/wasm/   # WASM 构建产物（由 make wasm 生成，已加入 .gitignore）
+├── tests/             # C++ 测试 + fake UCI 引擎 fixture
+├── scripts/           # build_pikafish.sh、build_wasm.sh
+├── third_party/
+│   └── pikafish/      # Pikafish 引擎（git 子模块）
+└── .github/workflows/
+    ├── ci.yml         # 原生构建 + 测试 CI
+    └── pages.yml      # GitHub Pages 自动部署
 ```
+
+### 技术栈
+
+| 层次 | 技术 |
+|------|------|
+| 规则引擎 | C++20，CMake |
+| 浏览器运行时 | Emscripten → WebAssembly |
+| 前端框架 | Vue 3 + TypeScript |
+| 构建工具 | Vite 8 |
+| 棋盘渲染 | Phaser 3 |
+| 样式 | Tailwind CSS 4 |
+| 引擎集成 | Pikafish（UCI 协议，git 子模块） |
+| CI/CD | GitHub Actions + GitHub Pages |
 
 ---
 
-## 在浏览器里测试规则引擎
+## FEN 格式说明
 
-页面加载后，DevTools Console 中可以直接调用：
+本项目使用与 Pikafish 兼容的 FEN：
 
-```js
-// 获取当前 FEN
-window.__CHINESE_CHESS_TEST_API__.currentFen()
+- 马 = `n/N`，象 = `b/B`（与国际象棋表示一致）
+- 完整六字段格式，例如：
 
-// 查询某格的合法走法
-window.__CHINESE_CHESS_TEST_API__.legalMovesFrom('a3')
-// => ['a3a4']
-
-// 执行一步棋
-window.__CHINESE_CHESS_TEST_API__.applyMove('a3a4')
-// => true
-
-// 重置棋局
-window.__CHINESE_CHESS_TEST_API__.reset()
 ```
+rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
+```
+
+- UCI 坐标：`a0`（红方左下角）到 `i9`（黑方右上角），走法示例：`a0a1`
 
 ---
 
-## CI / 部署
+## 贡献
 
-- **CI**（`.github/workflows/ci.yml`）：每次推送到 `master` 时，自动构建原生 C++ + 运行测试，并完整构建 WASM + 前端包。
-- **Pages 部署**（`.github/workflows/pages.yml`）：构建成功后自动部署到 `https://alexiachen.github.io/chinese-chess/`。
-
-> 首次部署前需要在仓库 **Settings → Pages → Source** 中选择 **GitHub Actions**。
+欢迎 PR 和 Issue！开发前请先运行 `make test` 确认基准测试通过。

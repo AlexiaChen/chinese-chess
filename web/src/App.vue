@@ -9,7 +9,7 @@ import { INITIAL_FEN, sideLabel } from './game/fen'
 const currentFen = ref(INITIAL_FEN)
 const resetKey = ref(0)
 const bridge = ref<BrowserBridge | null>(null)
-const bridgeStatus = ref('正在等待 WASM 棋规核心…')
+const bridgeStatus = ref('棋盘正在加载，请稍候…')
 const moveHistory = ref<string[]>([])
 
 declare global {
@@ -24,23 +24,11 @@ declare global {
 }
 
 const activeSide = computed(() => sideLabel(currentFen.value.split(' ')[1] ?? 'w'))
-
-const milestones: string[] = [
-  'Vue 3 + Vite + Phaser 前端骨架已建立',
-  '棋盘画布已切到 Pikafish 兼容 FEN 渲染',
-  'WASM 棋规核心已接入，浏览器内可直接验证合法着法',
-  'DOM overlay 已补齐点击入口，便于浏览器自动化回归',
+const setupTips: string[] = [
+  '红方先行，先点击己方棋子，再选择落点。',
+  '棋盘下方会显示当前可走的棋子和合法着法。',
+  '随时可以点击“重置棋盘”回到开局。',
 ]
-
-const tracks: string[] = [
-  '真实 Pikafish 已作为 third_party 子模块接入',
-  '原生 CLI 已能读取真实引擎 bestmove',
-  'Web 端正在沿用同一条 UCI / FEN 边界与 WASM 规则核心',
-]
-
-const runtimeBadge = computed(() =>
-  bridge.value ? 'WASM 规则核心在线 / DOM 落子可测' : '当前仅显示静态棋盘壳',
-)
 
 function resetBoard() {
   if (bridge.value) {
@@ -58,9 +46,9 @@ onMounted(async () => {
     const wasmBridge = await createWasmBridge()
     bridge.value = wasmBridge
     currentFen.value = wasmBridge.currentFen()
-    bridgeStatus.value = 'WASM 棋规核心已连接，可返回合法走法与新局面'
+    bridgeStatus.value = '棋盘已准备好，可以开始对弈。'
   } catch (error) {
-    bridgeStatus.value = '未找到 WASM 产物，当前显示静态棋盘壳'
+    bridgeStatus.value = '规则模块加载失败，请刷新页面后重试。'
   }
 })
 
@@ -112,7 +100,7 @@ watchEffect(() => {
             楚河汉界
           </h1>
           <p class="mt-4 max-w-md leading-8 text-stone-300/80">
-            这不是临时占位页，而是已经接上 WASM 棋规与浏览器可测交互层的中国象棋前端。
+            一局可以直接开始的中国象棋。点击棋子、选择落点，就能在浏览器里完成整盘对弈。
           </p>
 
           <div
@@ -121,7 +109,7 @@ watchEffect(() => {
             <span
               class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
             >
-              当前状态
+              游戏提示
             </span>
             <strong class="mt-2 block font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-xl leading-8">
               {{ bridgeStatus }}
@@ -143,10 +131,10 @@ watchEffect(() => {
               <span
                 class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
               >
-                引擎边界
+                当前局面
               </span>
               <strong class="mt-2 block font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-2xl">
-                UCI / FEN
+                {{ moveHistory.length === 0 ? '开局' : `已走 ${moveHistory.length} 步` }}
               </strong>
             </div>
           </div>
@@ -159,22 +147,17 @@ watchEffect(() => {
             >
               重置棋盘
             </button>
-            <span
-              class="inline-flex items-center rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-sm text-stone-300/80"
-            >
-              {{ runtimeBadge }}
-            </span>
           </div>
 
           <section class="mt-8">
             <div
               class="mb-3 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[12px] uppercase tracking-[0.26em] text-stone-300/70"
             >
-              里程碑
+              开始之前
             </div>
             <ul class="grid gap-3">
               <li
-                v-for="item in milestones"
+                v-for="item in setupTips"
                 :key="item"
                 class="relative rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4 pl-12 leading-7 text-stone-200/90"
               >
@@ -184,34 +167,6 @@ watchEffect(() => {
                 {{ item }}
               </li>
             </ul>
-          </section>
-
-          <section class="mt-8">
-            <div
-              class="mb-3 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[12px] uppercase tracking-[0.26em] text-stone-300/70"
-            >
-              技术走向
-            </div>
-            <ul class="grid gap-3">
-              <li
-                v-for="item in tracks"
-                :key="item"
-                class="rounded-[20px] border border-white/8 bg-white/[0.05] px-4 py-4 leading-7 text-stone-200/90"
-              >
-                {{ item }}
-              </li>
-            </ul>
-          </section>
-
-          <section class="mt-8 rounded-[24px] border border-white/10 bg-black/20 px-4 py-4">
-            <span
-              class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
-            >
-              当前 FEN
-            </span>
-            <code class="mt-3 block break-all font-mono text-[13px] leading-7 text-amber-100/80">
-              {{ currentFen }}
-            </code>
           </section>
         </div>
       </aside>
@@ -223,18 +178,12 @@ watchEffect(() => {
         <div class="relative">
           <header class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
             <div>
-              <span
-                class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[12px] uppercase tracking-[0.28em] text-stone-300/80"
-              >
-                Phaser Stage
-              </span>
               <h2 class="mt-2 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[clamp(2rem,4vw,3rem)]">
-                棋盘场景已可视化
+                对弈棋盘
               </h2>
             </div>
             <p class="leading-8 text-stone-300/80">
-              现在由 Phaser 负责棋盘视觉层，DOM overlay 负责可点击与自动化测试入口，两者共同复用
-              WASM 棋规核心。
+              点击棋盘上的己方棋子后，再点击高亮落点，或者使用棋盘下方的操作按钮完成走子。
             </p>
           </header>
 
@@ -274,7 +223,7 @@ watchEffect(() => {
                 v-if="moveHistory.length === 0"
                 class="rounded-2xl border border-dashed border-white/10 px-3 py-3 text-center text-sm text-stone-400/70 md:col-span-2 xl:col-span-4"
               >
-                连接 WASM 后，点击己方棋子可查看合法着法并完成走子。
+                先点击己方棋子，再选择一个合法落点开始对弈。
               </div>
             </div>
           </section>
