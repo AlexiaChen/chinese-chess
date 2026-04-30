@@ -187,6 +187,74 @@ Side opposite(Side side) {
     return side == Side::Red ? Side::Black : Side::Red;
 }
 
+Position find_general_position(const GameState& state, Side side) {
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position position {file, rank};
+            const Piece piece = state.piece_at(position);
+            if (piece.type == PieceType::General && piece.side == side) {
+                return position;
+            }
+        }
+    }
+
+    throw std::runtime_error("General not found");
+}
+
+int blockers_between(const GameState& state, Position from, Position to) {
+    if (from.file != to.file && from.rank != to.rank) {
+        return 0;
+    }
+
+    const int file_step = (to.file > from.file) - (to.file < from.file);
+    const int rank_step = (to.rank > from.rank) - (to.rank < from.rank);
+
+    int blockers = 0;
+    for (Position cursor {from.file + file_step, from.rank + rank_step};
+         cursor != to;
+         cursor = Position {cursor.file + file_step, cursor.rank + rank_step}) {
+        if (!state.piece_at(cursor).is_empty()) {
+            ++blockers;
+        }
+    }
+
+    return blockers;
+}
+
+int line_pressure_bonus(const GameState& state, Side side) {
+    const Position enemy_general = find_general_position(state, opposite(side));
+    int bonus = 0;
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position position {file, rank};
+            const Piece piece = state.piece_at(position);
+            if (piece.is_empty() || piece.side != side) {
+                continue;
+            }
+            if (piece.type != PieceType::Rook && piece.type != PieceType::Cannon) {
+                continue;
+            }
+            if (position.file != enemy_general.file && position.rank != enemy_general.rank) {
+                continue;
+            }
+
+            const int blockers = blockers_between(state, position, enemy_general);
+            if (piece.type == PieceType::Rook) {
+                if (blockers == 1) {
+                    bonus += 40;
+                } else if (blockers == 0) {
+                    bonus += 12;
+                }
+            } else if (piece.type == PieceType::Cannon && blockers == 2) {
+                bonus += 18;
+            }
+        }
+    }
+
+    return bonus;
+}
+
 void check_timeout(SearchContext& context) {
     ++context.visited_nodes;
     if (!context.has_deadline) {
@@ -224,6 +292,9 @@ int evaluate_red_perspective(const GameState& state) {
     if (state.is_in_check(Side::Red)) {
         score -= 60;
     }
+
+    score += line_pressure_bonus(state, Side::Red);
+    score -= line_pressure_bonus(state, Side::Black);
 
     return score;
 }
@@ -353,7 +424,7 @@ int negamax(
     bool allow_null_move) {
     check_timeout(context);
     if (context.timed_out) {
-        return evaluate_for_side_to_move(state);
+        return evaluate_position(state);
     }
 
     const int original_alpha = alpha;
@@ -379,7 +450,7 @@ int negamax(
 
     if (allow_null_move && depth >= 3 && !state.is_in_check(state.side_to_move())
         && has_null_move_material(state, state.side_to_move())) {
-        const int static_eval = evaluate_for_side_to_move(state);
+        const int static_eval = evaluate_position(state);
         if (static_eval >= beta) {
             const int reduction = 2 + depth / 3;
             const GameState null_state = state.pass_turn();
@@ -464,10 +535,10 @@ int negamax(
 int quiescence(const GameState& state, SearchContext& context, int alpha, int beta, int ply) {
     check_timeout(context);
     if (context.timed_out) {
-        return evaluate_for_side_to_move(state);
+        return evaluate_position(state);
     }
 
-    const int stand_pat = evaluate_for_side_to_move(state);
+    const int stand_pat = evaluate_position(state);
     if (stand_pat >= beta) {
         return beta;
     }
@@ -593,6 +664,10 @@ SearchContext make_context(const SearchOptions& options) {
 }
 
 }  // namespace
+
+int evaluate_position(const GameState& state) {
+    return evaluate_for_side_to_move(state);
+}
 
 SearchResult search_best_move(const GameState& state, const SearchOptions& options) {
     if (options.max_depth <= 0) {

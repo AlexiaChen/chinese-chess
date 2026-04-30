@@ -23,6 +23,7 @@ struct SearchResult {
     bool timed_out {false};
 };
 
+int evaluate_position(const GameState& state);
 SearchResult search_best_move(const GameState& state, const SearchOptions& options);
 std::optional<Move> try_find_best_move(const GameState& state, int depth);
 std::optional<Move> try_find_best_move(const GameState& state, const SearchOptions& options);

@@ -109,3 +109,19 @@
 - **Evidence**: `CMakeLists.txt:61`, reproduced through `web preview` + browser automation after `a3a4`
 - **Confidence**: 10/10
 - **Action**: Whenever adding Worker-hosted WASM features here, verify the Emscripten environment flags include `worker` and validate through an actual preview/browser run, not just builds.
+
+### L-014: [architecture] For this project, feature-based eval should land before NNUE-scale complexity (2026-04-30)
+- **Issue**: #80 — 增强AI的评估函数
+- **Trigger**: evaluation function, feature-based eval, handcrafted eval, NNUE, WASM, GitHub Pages
+- **Pattern**: Frontier Xiangqi engines lean toward NNUE or hybrid evaluation, but this project's shared WASM core benefits more from first deepening the handcrafted / feature-based evaluator. That path keeps GitHub Pages deployment simple while still improving the engine meaningfully.
+- **Evidence**: issue #80 research summary, `AGENTS.md`, `src/engine/search.cpp`
+- **Confidence**: 9/10
+- **Action**: When planning future eval work here, treat lightweight feature-based terms as the default next step and only move to small NNUE/hybrid once the handcrafted feature stack is mature.
+
+### L-015: [gotcha] Exposing the evaluator as a public testable API helps de-risk search tuning (2026-04-30)
+- **Issue**: #80 — 增强AI的评估函数
+- **Trigger**: evaluate_position, search tuning, regression tests, evaluation API
+- **Pattern**: Search tuning is hard to verify when evaluation stays buried inside the searcher. In this codebase, exposing `evaluate_position()` made it possible to lock a Xiangqi-specific pressure signal with a focused regression test instead of inferring it indirectly from move choices.
+- **Evidence**: `src/engine/search.h:26`, `tests/game_tests.cpp:236`
+- **Confidence**: 9/10
+- **Action**: For future evaluator work here, prefer direct evaluator assertions when possible so heuristic changes stay reviewable and regressions are easier to catch.

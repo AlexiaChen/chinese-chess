@@ -232,6 +232,17 @@ void search_midgame_node_budget_test() {
            "Midgame search should stay under the node budget after pruning improvements");
 }
 
+void feature_based_evaluation_rewards_general_file_pressure_test() {
+    const GameState aligned_pressure = GameState::from_fen("4k4/9/4n4/9/4R4/9/9/9/9/4K4 w - - 0 1");
+    const GameState neutral_rook = GameState::from_fen("4k4/9/4n4/9/3R5/9/9/9/9/4K4 w - - 0 1");
+
+    const int aligned_score = chinese_chess::engine::evaluate_position(aligned_pressure);
+    const int neutral_score = chinese_chess::engine::evaluate_position(neutral_rook);
+
+    expect(aligned_score >= neutral_score + 30,
+           "Feature-based evaluation should reward rook pressure on the enemy general file");
+}
+
 void browser_session_bridge_test() {
     chinese_chess::bridge::BrowserSession session;
 
@@ -313,6 +324,7 @@ int main() {
     search_report_exposes_metadata_test();
     search_uses_opening_book_for_red_first_moves_test();
     search_midgame_node_budget_test();
+    feature_based_evaluation_rewards_general_file_pressure_test();
     browser_session_bridge_test();
     browser_session_fen_search_does_not_mutate_live_state_test();
     return 0;
