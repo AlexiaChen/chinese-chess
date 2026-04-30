@@ -32,7 +32,7 @@ std::vector<std::string> BrowserSession::legal_moves_from(std::string_view squar
 }
 
 bool BrowserSession::apply_move(std::string_view move) {
-    return state_.apply_move(engine::from_uci_move(move));
+    return apply_move_with_history(engine::from_uci_move(move));
 }
 
 std::string BrowserSession::apply_ai_move(int depth) {
@@ -54,7 +54,7 @@ AiMoveReport BrowserSession::apply_ai_move_with_report(int max_depth, int time_b
         return {};
     }
 
-    if (!state_.apply_move(*search_result.best_move)) {
+    if (!apply_move_with_history(*search_result.best_move)) {
         throw std::runtime_error("AI selected an illegal move");
     }
 
@@ -74,8 +74,34 @@ AiMoveReport BrowserSession::apply_ai_move_with_report(int max_depth, int time_b
     return report;
 }
 
+bool BrowserSession::undo_last_move() {
+    if (undo_history_.empty()) {
+        return false;
+    }
+
+    state_ = undo_history_.back();
+    undo_history_.pop_back();
+    return true;
+}
+
+std::size_t BrowserSession::undo_count() const {
+    return undo_history_.size();
+}
+
 void BrowserSession::reset() {
     state_ = GameState::initial();
+    undo_history_.clear();
+}
+
+bool BrowserSession::apply_move_with_history(const Move& move) {
+    GameState next_state = state_;
+    if (!next_state.apply_move(move)) {
+        return false;
+    }
+
+    undo_history_.push_back(state_);
+    state_ = next_state;
+    return true;
 }
 
 }  // namespace chinese_chess::bridge

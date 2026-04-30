@@ -177,18 +177,30 @@ void browser_session_bridge_test() {
     expect(
         session.current_fen() == "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1",
         "Browser session should expose the Pikafish-compatible initial FEN");
+    expect(session.undo_count() == 0, "Fresh browser session should start with no undo history");
+    expect(!session.undo_last_move(), "Fresh browser session should reject undo");
 
     const auto moves = session.legal_moves_from("a3");
     expect(std::find(moves.begin(), moves.end(), "a3a4") != moves.end(),
            "Browser session should expose legal opening soldier move");
     expect(session.apply_move("a3a4"), "Browser session should accept a legal move");
     expect(session.side_to_move() == Side::Black, "Browser session should switch side after applying move");
+    expect(session.undo_count() == 1, "Human move should add one undo snapshot");
 
     const std::string ai_move = session.apply_ai_move(1);
     expect(!ai_move.empty(), "Browser session should be able to apply an AI move");
     expect(session.side_to_move() == Side::Red, "AI move should hand control back to the human side");
+    expect(session.undo_count() == 2, "Human move plus AI reply should record two undo snapshots");
+    expect(session.undo_last_move(), "Undo should revert the latest move");
+    expect(session.side_to_move() == Side::Black, "Undoing the AI reply should hand turn back to black");
+    expect(session.undo_count() == 1, "Undo should pop one snapshot");
+    expect(session.undo_last_move(), "Undo should also revert the player's move");
+    expect(session.current_fen() == GameState::initial().to_fen(),
+           "Undoing both plies should restore the initial position");
+    expect(session.undo_count() == 0, "Undo history should be empty after rolling back both plies");
 
     session.reset();
+    expect(session.undo_count() == 0, "Reset should clear undo history");
     expect(session.apply_move("a3a4"), "Browser session should still accept a legal move after reset");
     const std::string stronger_ai_move = session.apply_ai_move_with_limits(4, 25);
     expect(!stronger_ai_move.empty(), "Budgeted browser AI should still produce a move");

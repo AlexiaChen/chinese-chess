@@ -59,7 +59,7 @@ if(EMSCRIPTEN)
             "-sALLOW_MEMORY_GROWTH=1"
             "-sENVIRONMENT=web"
             "-sEXPORT_ES6=1"
-            "-sEXPORTED_FUNCTIONS=['_malloc','_free','_chinese_chess_current_fen','_chinese_chess_legal_moves_from','_chinese_chess_apply_move','_chinese_chess_apply_ai_move','_chinese_chess_apply_ai_move_with_limits','_chinese_chess_apply_ai_move_with_report','_chinese_chess_reset']"
+            "-sEXPORTED_FUNCTIONS=['_malloc','_free','_chinese_chess_current_fen','_chinese_chess_legal_moves_from','_chinese_chess_apply_move','_chinese_chess_undo_last_move','_chinese_chess_undo_count','_chinese_chess_apply_ai_move','_chinese_chess_apply_ai_move_with_limits','_chinese_chess_apply_ai_move_with_report','_chinese_chess_reset']"
             "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','ccall','cwrap','lengthBytesUTF8','stringToUTF8']"
             "-sFILESYSTEM=0"
             "-sMODULARIZE=1"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,10 +32,15 @@ public:
     [[nodiscard]] std::string apply_ai_move(int depth);
     [[nodiscard]] std::string apply_ai_move_with_limits(int max_depth, int time_budget_ms);
     [[nodiscard]] AiMoveReport apply_ai_move_with_report(int max_depth, int time_budget_ms);
+    bool undo_last_move();
+    [[nodiscard]] std::size_t undo_count() const;
     void reset();
 
 private:
+    bool apply_move_with_history(const Move& move);
+
     GameState state_;
+    std::vector<GameState> undo_history_;
 };
 
 }  // namespace chinese_chess::bridge

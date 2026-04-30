@@ -45,3 +45,11 @@
 - **Evidence**: `src/engine/search.cpp:35`, `src/engine/search.cpp:151`, `src/engine/search.cpp:307`
 - **Confidence**: 10/10
 - **Action**: For future WASM search budgets, cancellation, or interruption support, prefer explicit flags and bounded return paths over exception-driven control flow.
+
+### L-006: [gotcha] New browser/WASM C exports must be added to Emscripten EXPORTED_FUNCTIONS (2026-04-30)
+- **Issue**: #75 — 增加悔棋功能
+- **Trigger**: WASM, Emscripten, EXPORTED_FUNCTIONS, cwrap, browser bridge, runtime abort
+- **Pattern**: Adding a new C ABI function in `wasm_exports.cpp` is not enough for the browser build. If the symbol is missing from the Emscripten `EXPORTED_FUNCTIONS` list, `cwrap()` will compile cleanly but abort at runtime the first time the page calls it.
+- **Evidence**: `CMakeLists.txt:62`, `src/bridge/wasm_exports.cpp:72`, `web/src/bridge/wasmBridge.ts:51`
+- **Confidence**: 10/10
+- **Action**: Whenever adding or renaming browser-facing C functions, update the exported symbol list in `CMakeLists.txt` and validate through a real WASM/browser flow, not native tests alone.

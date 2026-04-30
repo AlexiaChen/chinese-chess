@@ -13,14 +13,14 @@
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
   - `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, time-budgeted alpha-beta, move ordering, transposition caching, quiescence search, and static evaluation for native/WASM gameplay
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
-- `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine
-- `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `reset`)
+- `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine, including move history for browser-side undo
+- `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `undo_last_move`, `undo_count`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `reset`)
   - `src/apps/cli/main.cpp`: native CLI target that can print the board or query a configured engine command for `bestmove`
   - `tests/game_tests.cpp`: rules and codec coverage
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
   - `third_party/pikafish`: official Pikafish source as a git submodule
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
-  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, and summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV)
+  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, and summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV)
   - `web/src/components/PhaserBoard.vue`: Phaser board wrapper with DOM piece/move overlays plus SVG path highlighting for the AI's latest move
   - `.github/workflows/ci.yml`: GitHub Actions CI for native tests plus WASM/frontend builds
   - `.github/workflows/pages.yml`: GitHub Pages build and deploy workflow

@@ -15,6 +15,7 @@ const aiThinking = ref(false)
 const humanSide = ref<'w' | 'b'>('w')
 const lastAiReport = ref<AiMoveReport | null>(null)
 const lastAiMoveLabel = ref('')
+const undoCount = ref(0)
 
 const AI_MAX_DEPTH = 10
 const AI_TIME_BUDGET_MS = 450
@@ -23,6 +24,8 @@ declare global {
   interface Window {
     __CHINESE_CHESS_TEST_API__?: {
       applyMove: (move: string) => boolean
+      undoLastMove: () => boolean
+      undoCount: () => number
       applyAiMove: (maxDepth: number, timeBudgetMs?: number) => string | null
       applyAiMoveWithReport: (maxDepth: number, timeBudgetMs: number) => AiMoveReport | null
       currentFen: () => string
@@ -39,6 +42,13 @@ const activeSide = computed(() => sideLabel(activeSideToken.value))
 const aiSide = computed(() => (humanSide.value === 'w' ? 'b' : 'w'))
 const humanTurn = computed(() => activeSideToken.value === humanSide.value)
 const interactionLocked = computed(() => aiThinking.value || (aiEnabled.value && !humanTurn.value))
+const canUndo = computed(() => {
+  if (!bridge.value || aiThinking.value) {
+    return false
+  }
+
+  return aiEnabled.value ? undoCount.value >= 2 : undoCount.value >= 1
+})
 const modeLabel = computed(() => {
   if (!aiEnabled.value) {
     return '双人对弈'
@@ -58,6 +68,17 @@ const aiPvLabel = computed(() =>
   lastAiReport.value?.principalVariation.length
     ? lastAiReport.value.principalVariation.join(' ')
     : '等待 AI 落子后显示',
+)
+const undoButtonLabel = computed(() => (aiEnabled.value ? '悔一回合' : '悔一步'))
+const undoAvailabilityLabel = computed(() => {
+  if (aiEnabled.value) {
+    return undoCount.value >= 2 ? `可回退 ${Math.floor(undoCount.value / 2)} 个回合` : '至少完成一回合后可用'
+  }
+
+  return undoCount.value > 0 ? `可回退 ${undoCount.value} 步` : '暂无可撤销着法'
+})
+const undoHint = computed(() =>
+  aiEnabled.value ? '会同时撤回你的上一步与 AI 的应手。' : '仅撤销最近一步落子。',
 )
 const setupTips: string[] = [
   '支持选择我先或 AI 先，开局会自动按选定方落子。',
@@ -110,6 +131,22 @@ function refreshBridgeStatus() {
   bridgeStatus.value = humanSide.value === 'w' ? '棋盘已准备好，你执红先行。' : '棋盘已准备好，AI 执红先行。'
 }
 
+function clearAiInsight() {
+  lastAiReport.value = null
+  lastAiMoveLabel.value = ''
+}
+
+function syncFromBridge() {
+  if (!bridge.value) {
+    currentFen.value = INITIAL_FEN
+    undoCount.value = 0
+    return
+  }
+
+  currentFen.value = bridge.value.currentFen()
+  undoCount.value = bridge.value.undoCount()
+}
+
 async function maybeRunAiTurn() {
   if (!bridge.value || !aiEnabled.value || aiThinking.value || activeSideToken.value !== aiSide.value) {
     return
@@ -130,22 +167,38 @@ async function maybeRunAiTurn() {
 
   lastAiReport.value = aiReport
   lastAiMoveLabel.value = describeAiMove(fenBeforeAiMove, aiReport.move)
-  currentFen.value = bridge.value.currentFen()
+  syncFromBridge()
   bridgeStatus.value = `AI 已落子 ${lastAiMoveLabel.value}`
 }
 
 function resetBoard() {
   aiThinking.value = false
-  lastAiReport.value = null
-  lastAiMoveLabel.value = ''
+  clearAiInsight()
   if (bridge.value) {
     bridge.value.reset()
-    currentFen.value = bridge.value.currentFen()
-  } else {
-    currentFen.value = INITIAL_FEN
   }
+  syncFromBridge()
   resetKey.value += 1
   refreshBridgeStatus()
+}
+
+function undoBoard() {
+  if (!bridge.value || !canUndo.value) {
+    return
+  }
+
+  const stepsToUndo = aiEnabled.value ? 2 : 1
+  for (let index = 0; index < stepsToUndo; index += 1) {
+    if (!bridge.value.undoLastMove()) {
+      break
+    }
+  }
+
+  aiThinking.value = false
+  clearAiInsight()
+  syncFromBridge()
+  resetKey.value += 1
+  bridgeStatus.value = aiEnabled.value ? '已悔一回合，回到你做决定之前。' : '已悔最近一步。'
 }
 
 function setAiEnabled(enabled: boolean) {
@@ -165,7 +218,7 @@ onMounted(async () => {
   try {
     const wasmBridge = await createWasmBridge()
     bridge.value = wasmBridge
-    currentFen.value = wasmBridge.currentFen()
+    syncFromBridge()
     refreshBridgeStatus()
   } catch (error) {
     bridgeStatus.value = '规则模块加载失败，请刷新页面后重试。'
@@ -196,9 +249,24 @@ watchEffect(() => {
 
       const applied = bridge.value.applyMove(move)
       if (applied) {
-        currentFen.value = bridge.value.currentFen()
+        syncFromBridge()
       }
       return applied
+    },
+    undoLastMove() {
+      if (!bridge.value) {
+        return false
+      }
+
+      const undone = bridge.value.undoLastMove()
+      if (undone) {
+        clearAiInsight()
+        syncFromBridge()
+      }
+      return undone
+    },
+    undoCount() {
+      return undoCount.value
     },
     applyAiMove(maxDepth: number, timeBudgetMs?: number) {
       if (!bridge.value) {
@@ -211,7 +279,7 @@ watchEffect(() => {
       }
 
       lastAiMoveLabel.value = move
-      currentFen.value = bridge.value.currentFen()
+      syncFromBridge()
       refreshBridgeStatus()
       return move
     },
@@ -227,7 +295,7 @@ watchEffect(() => {
 
       lastAiReport.value = report
       lastAiMoveLabel.value = report.move
-      currentFen.value = bridge.value.currentFen()
+      syncFromBridge()
       refreshBridgeStatus()
       return report
     },
@@ -349,26 +417,62 @@ watchEffect(() => {
               </div>
             </div>
 
-            <div class="mt-5 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              class="rounded-full bg-[linear-gradient(135deg,#8e2e1c,#d46a31)] px-5 py-3 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base text-amber-50 shadow-[0_12px_30px_rgba(212,106,49,0.32)] transition hover:scale-[1.02]"
-              @click="resetBoard"
-              >
-                重置棋盘
-              </button>
-              <button
-                type="button"
-                class="rounded-full border border-white/15 bg-white/[0.06] px-5 py-3 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base text-stone-100 transition hover:border-amber-200/35 hover:bg-white/[0.1]"
-                @click="toggleAi"
-              >
-                {{ aiEnabled ? '关闭 AI 对手' : '开启 AI 对手' }}
-              </button>
-              <span
-                class="rounded-full border border-white/10 bg-black/20 px-4 py-2 font-mono text-xs tracking-wide text-stone-300/75"
-              >
-                {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH}` : 'AI 已关闭' }}
-              </span>
+            <div class="mt-5 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4">
+              <div class="flex items-center justify-between gap-3">
+                <span
+                  class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[11px] uppercase tracking-[0.24em] text-stone-300/70"
+                >
+                  局面控制
+                </span>
+                <span class="font-mono text-xs text-stone-400/70">
+                  {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH}` : 'AI 已关闭' }}
+                </span>
+              </div>
+              <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  class="rounded-[20px] bg-[linear-gradient(135deg,#8e2e1c,#d46a31)] px-5 py-4 text-left font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base text-amber-50 shadow-[0_12px_30px_rgba(212,106,49,0.32)] transition hover:scale-[1.02]"
+                  @click="resetBoard"
+                >
+                  <span class="block text-lg">重置棋盘</span>
+                  <span class="mt-1 block text-xs text-amber-100/80">回到标准开局</span>
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[20px] border px-5 py-4 text-left transition"
+                  :class="
+                    canUndo
+                      ? 'border-emerald-200/25 bg-[linear-gradient(135deg,rgba(62,106,90,0.42),rgba(23,33,31,0.72))] text-stone-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(7,12,10,0.24)] hover:border-emerald-200/40 hover:bg-[linear-gradient(135deg,rgba(76,126,107,0.5),rgba(26,37,34,0.8))]'
+                      : 'border-white/10 bg-black/20 text-stone-500'
+                  "
+                  :disabled="!canUndo"
+                  @click="undoBoard"
+                >
+                  <span class="block font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-lg">{{ undoButtonLabel }}</span>
+                  <span class="mt-1 block text-xs" :class="canUndo ? 'text-emerald-100/75' : 'text-stone-500'">
+                    {{ undoHint }}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[20px] border border-white/15 bg-white/[0.06] px-5 py-4 text-left font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base text-stone-100 transition hover:border-amber-200/35 hover:bg-white/[0.1]"
+                  @click="toggleAi"
+                >
+                  <span class="block text-lg">{{ aiEnabled ? '关闭 AI 对手' : '开启 AI 对手' }}</span>
+                  <span class="mt-1 block text-xs text-stone-300/70">
+                    {{ aiEnabled ? '切换到双人对弈' : '恢复与 AI 对弈' }}
+                  </span>
+                </button>
+              </div>
+              <div class="mt-3 rounded-[18px] border border-white/8 bg-black/20 px-4 py-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-stone-200/85">悔棋说明</span>
+                  <span class="font-mono tracking-wide text-stone-400/75">{{ undoAvailabilityLabel }}</span>
+                </div>
+                <p class="mt-2 leading-6 text-stone-300/75">
+                  {{ undoHint }}
+                </p>
+              </div>
             </div>
 
           <section class="mt-8">

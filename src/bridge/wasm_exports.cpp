@@ -69,6 +69,14 @@ int chinese_chess_apply_move(const char* move) {
     return chinese_chess::bridge::session().apply_move(move) ? 1 : 0;
 }
 
+int chinese_chess_undo_last_move() {
+    return chinese_chess::bridge::session().undo_last_move() ? 1 : 0;
+}
+
+int chinese_chess_undo_count() {
+    return static_cast<int>(chinese_chess::bridge::session().undo_count());
+}
+
 const char* chinese_chess_apply_ai_move(int depth) {
     auto& buffer = chinese_chess::bridge::shared_buffer();
     buffer = chinese_chess::bridge::session().apply_ai_move(depth);

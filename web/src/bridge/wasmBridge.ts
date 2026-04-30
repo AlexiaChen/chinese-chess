@@ -12,6 +12,8 @@ export interface BrowserBridge {
   currentFen: () => string
   legalMovesFrom: (square: string) => string[]
   applyMove: (move: string) => boolean
+  undoLastMove: () => boolean
+  undoCount: () => number
   applyAiMove: (maxDepth: number, timeBudgetMs?: number) => string | null
   applyAiMoveWithReport: (maxDepth: number, timeBudgetMs: number) => AiMoveReport | null
   reset: () => void
@@ -46,6 +48,8 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
   const applyMove = runtime.cwrap<(move: string) => number>('chinese_chess_apply_move', 'number', [
     'string',
   ])
+  const undoLastMove = runtime.cwrap<() => number>('chinese_chess_undo_last_move', 'number', [])
+  const undoCount = runtime.cwrap<() => number>('chinese_chess_undo_count', 'number', [])
   const applyAiMove = runtime.cwrap<(depth: number) => string>('chinese_chess_apply_ai_move', 'string', [
     'number',
   ])
@@ -69,6 +73,10 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
     applyMove(move: string) {
       return applyMove(move) === 1
     },
+    undoLastMove() {
+      return undoLastMove() === 1
+    },
+    undoCount,
     applyAiMove(maxDepth: number, timeBudgetMs?: number) {
       const move =
         timeBudgetMs === undefined ? applyAiMove(maxDepth) : applyAiMoveWithLimits(maxDepth, timeBudgetMs)
