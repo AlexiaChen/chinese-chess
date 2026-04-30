@@ -40,13 +40,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix web
 
-      - name: Build WASM bridge
-        run: ./scripts/build_wasm.sh
-
-      - name: Build frontend bundle
-        env:
-          VITE_BASE_PATH: /chinese-chess/
-        run: npm run build --prefix web
+      - name: Build Pages bundle
+        run: make pages-build
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5

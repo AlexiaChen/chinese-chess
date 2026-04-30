@@ -25,7 +25,7 @@ jobs:
           submodules: recursive
 
       - name: Run native build and tests
-        run: make test
+        run: make test-release
 
   web:
     name: WASM and web build
@@ -52,8 +52,5 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix web
 
-      - name: Build WASM bridge
-        run: make wasm
-
-      - name: Build frontend bundle
-        run: make web-build
+      - name: Build Pages-targeted WASM and frontend bundle
+        run: make pages-build

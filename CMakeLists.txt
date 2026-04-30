@@ -46,17 +46,35 @@ add_custom_target(
 )
 
 if(EMSCRIPTEN)
+    target_compile_options(
+        chinese_chess_core
+        PRIVATE
+            "$<$<CONFIG:Release>:-O3>"
+            "$<$<CONFIG:Release>:-flto>"
+    )
+
     add_executable(chinese_chess_wasm
         src/bridge/wasm_entry.cpp
     )
 
     target_link_libraries(chinese_chess_wasm PRIVATE chinese_chess_core)
 
+    target_compile_options(
+        chinese_chess_wasm
+        PRIVATE
+            "$<$<CONFIG:Release>:-O3>"
+            "$<$<CONFIG:Release>:-flto>"
+    )
+
     set_target_properties(chinese_chess_wasm PROPERTIES OUTPUT_NAME "chinese_chess_wasm")
 
     target_link_options(
         chinese_chess_wasm
         PRIVATE
+            "$<$<CONFIG:Release>:-O3>"
+            "$<$<CONFIG:Release>:-flto>"
+            "$<$<CONFIG:Release>:-sASSERTIONS=0>"
+            "$<$<CONFIG:Release>:-sSTACK_OVERFLOW_CHECK=0>"
             "-sALLOW_MEMORY_GROWTH=1"
             "-sENVIRONMENT=web,worker"
             "-sEXPORT_ES6=1"

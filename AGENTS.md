@@ -35,19 +35,21 @@
 
 - Build system target: CMake.
 - Default command entrypoint: top-level `Makefile`
-- Configure: `make configure`
-- Build: `make build`
-- Test: `make test`
-- Native CLI smoke target: `./build/chinese_chess_cli`
+- Debug configure/build/test defaults: `make configure`, `make build`, `make test`
+- Explicit Debug aliases: `make configure-debug`, `make build-debug`, `make test-debug`
+- Explicit Release aliases: `make configure-release`, `make build-release`, `make test-release`
+- Native CLI smoke targets: `make native-cli` (Debug) or `make native-cli-release`
 - Fake-engine smoke target: `make fake-engine-smoke`
-- Build bundled Pikafish: `make pikafish` or `cmake --build build --target pikafish_build`
+- Release fake-engine smoke target: `make fake-engine-smoke-release`
+- Build bundled Pikafish: `make pikafish` or `cmake --build build/debug --target pikafish_build`
 - Real-engine smoke target: `make engine-smoke`
+- Release real-engine smoke target: `make engine-smoke-release`
 - Frontend install: `make web-install`
 - Frontend dev: `make web-dev`
 - Frontend preview: `make web-preview`
 - Frontend build: `make web-build` or `make web-bundle`
-- WASM build: `make wasm`
-- Pages-targeted frontend build: `make pages-build`
+- WASM build: `make wasm`/`make wasm-debug` for Debug, `make wasm-release` for Release
+- Pages-targeted frontend build: `make pages-build` (always builds Release WASM first)
 
 ## Code Conventions
 
