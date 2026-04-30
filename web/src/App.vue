@@ -20,7 +20,7 @@ const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
 
 const AI_MAX_DEPTH = 20
-const AI_TIME_BUDGET_MS = 2000
+const AI_TIME_BUDGET_MS = 5000
 
 type PendingAiSearch = {
   requestId: number
