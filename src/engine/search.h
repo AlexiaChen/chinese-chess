@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -8,9 +9,19 @@
 
 namespace chinese_chess::engine {
 
+struct SearchProgress {
+    int depth {};
+    Move current_move {};
+    std::optional<Move> best_move_so_far;
+    std::uint64_t visited_nodes {};
+    int analyzed_root_moves {};
+    int total_root_moves {};
+};
+
 struct SearchOptions {
     int max_depth {1};
     int time_budget_ms {0};
+    std::function<void(const SearchProgress&)> progress_callback;
 };
 
 struct SearchResult {

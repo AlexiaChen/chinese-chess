@@ -8,6 +8,14 @@ export interface AiMoveReport {
   timedOut: boolean
 }
 
+export interface SearchProgress {
+  currentMove: string
+  depth: number
+  analyzedRootMoves: number
+  totalRootMoves: number
+  visitedNodes: number
+}
+
 export interface BrowserBridge {
   currentFen: () => string
   legalMovesFrom: (square: string) => string[]
@@ -21,6 +29,12 @@ export interface BrowserBridge {
     maxDepth: number,
     timeBudgetMs: number,
   ) => AiMoveReport | null
+  searchAiMoveForFenWithProgress: (
+    fen: string,
+    maxDepth: number,
+    timeBudgetMs: number,
+    onProgress: (progress: SearchProgress) => void,
+  ) => AiMoveReport | null
   reset: () => void
 }
 
@@ -30,6 +44,23 @@ interface EmscriptenRuntime {
     returnType: string | null,
     argTypes: string[],
   ) => T
+  chineseChessHandleSearchProgress?: (
+    currentMove: string,
+    depth: number,
+    analyzedRootMoves: number,
+    totalRootMoves: number,
+    visitedNodes: number,
+  ) => void
+}
+
+type SearchProgressHookHost = typeof globalThis & {
+  __chineseChessHandleSearchProgress?: (
+    currentMove: string,
+    depth: number,
+    analyzedRootMoves: number,
+    totalRootMoves: number,
+    visitedNodes: number,
+  ) => void
 }
 
 interface EmscriptenModuleFactory {
@@ -73,6 +104,15 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
   >('chinese_chess_search_ai_move_for_fen_with_report', 'string', ['string', 'number', 'number'])
   const reset = runtime.cwrap<() => void>('chinese_chess_reset', null, [])
 
+  function parseAiMoveReport(raw: string) {
+    if (raw.length === 0) {
+      return null
+    }
+
+    const report = JSON.parse(raw) as AiMoveReport
+    return report.move.length > 0 ? report : null
+  }
+
   return {
     currentFen,
     legalMovesFrom(square: string) {
@@ -91,22 +131,40 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
       return move.length > 0 ? move : null
     },
     applyAiMoveWithReport(maxDepth: number, timeBudgetMs: number) {
-      const raw = applyAiMoveWithReport(maxDepth, timeBudgetMs)
-      if (raw.length === 0) {
-        return null
-      }
-
-      const report = JSON.parse(raw) as AiMoveReport
-      return report.move.length > 0 ? report : null
+      return parseAiMoveReport(applyAiMoveWithReport(maxDepth, timeBudgetMs))
     },
     searchAiMoveForFenWithReport(fen: string, maxDepth: number, timeBudgetMs: number) {
-      const raw = searchAiMoveForFenWithReport(fen, maxDepth, timeBudgetMs)
-      if (raw.length === 0) {
-        return null
+      return parseAiMoveReport(searchAiMoveForFenWithReport(fen, maxDepth, timeBudgetMs))
+    },
+    searchAiMoveForFenWithProgress(
+      fen: string,
+      maxDepth: number,
+      timeBudgetMs: number,
+      onProgress: (progress: SearchProgress) => void,
+    ) {
+      const hook = (
+        currentMove: string,
+        depth: number,
+        analyzedRootMoves: number,
+        totalRootMoves: number,
+        visitedNodes: number,
+      ) => {
+        onProgress({
+          currentMove,
+          depth,
+          analyzedRootMoves,
+          totalRootMoves,
+          visitedNodes,
+        })
       }
-
-      const report = JSON.parse(raw) as AiMoveReport
-      return report.move.length > 0 ? report : null
+      runtime.chineseChessHandleSearchProgress = hook
+      ;(globalThis as SearchProgressHookHost).__chineseChessHandleSearchProgress = hook
+      try {
+        return parseAiMoveReport(searchAiMoveForFenWithReport(fen, maxDepth, timeBudgetMs))
+      } finally {
+        delete runtime.chineseChessHandleSearchProgress
+        delete (globalThis as SearchProgressHookHost).__chineseChessHandleSearchProgress
+      }
     },
     reset,
   }

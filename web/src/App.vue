@@ -13,6 +13,7 @@ const bridge = ref<BrowserBridge | null>(null)
 const bridgeStatus = ref('棋盘正在加载，请稍候…')
 const aiEnabled = ref(true)
 const aiThinking = ref(false)
+const aiThinkingMove = ref<string | null>(null)
 const humanSide = ref<'w' | 'b'>('w')
 const lastAiReport = ref<AiMoveReport | null>(null)
 const lastAiMoveLabel = ref('')
@@ -94,7 +95,7 @@ const undoHint = computed(() =>
 const setupTips: string[] = [
   '支持选择我先或 AI 先，开局会自动按选定方落子。',
   '棋盘会自动让玩家一方保持在下方，避免操作河对面的棋子。',
-  'AI 上一步会在棋盘上高亮路径，并在侧边栏展示评估、深度、节点数与主变化线。',
+  'AI 思考时会用绿色方框跳动标出当前正在分析的起手棋子，落子后继续保留上一步路径与搜索摘要。',
   '关闭 AI 后仍可作为双人对弈棋盘使用。',
 ]
 
@@ -148,6 +149,10 @@ function clearAiInsight() {
   lastAiMoveLabel.value = ''
 }
 
+function clearAiThinkingProgress() {
+  aiThinkingMove.value = null
+}
+
 function syncFromBridge() {
   if (!bridge.value) {
     currentFen.value = INITIAL_FEN
@@ -182,6 +187,13 @@ function ensureAiWorker() {
   const worker = new Worker(new URL('./workers/aiSearchWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent<AiSearchWorkerResponse>) => {
     const message = event.data
+    if (message.type === 'progress') {
+      if (pendingAiSearch && message.requestId === pendingAiSearch.requestId) {
+        aiThinkingMove.value = message.progress.currentMove
+      }
+      return
+    }
+
     if (!pendingAiSearch || message.requestId !== pendingAiSearch.requestId) {
       return
     }
@@ -240,6 +252,7 @@ function requestAiMoveReport(
 
 function cancelAiSearch() {
   aiThinking.value = false
+  clearAiThinkingProgress()
   disposeAiWorker(true)
 }
 
@@ -250,6 +263,7 @@ async function maybeRunAiTurn() {
 
   const fenBeforeAiMove = currentFen.value
   aiThinking.value = true
+  clearAiThinkingProgress()
   refreshBridgeStatus()
   await nextTick()
 
@@ -258,10 +272,12 @@ async function maybeRunAiTurn() {
     aiReport = await requestAiMoveReport(fenBeforeAiMove, AI_MAX_DEPTH, AI_TIME_BUDGET_MS)
   } catch (error) {
     aiThinking.value = false
+    clearAiThinkingProgress()
     bridgeStatus.value = 'AI 搜索失败，请稍后重试。'
     return
   }
   aiThinking.value = false
+  clearAiThinkingProgress()
 
   if (!aiReport) {
     if (!bridge.value || !aiEnabled.value || currentFen.value !== fenBeforeAiMove) {
@@ -291,6 +307,7 @@ async function maybeRunAiTurn() {
 
 function resetBoard() {
   cancelAiSearch()
+  clearAiThinkingProgress()
   clearAiInsight()
   if (bridge.value) {
     bridge.value.reset()
@@ -313,6 +330,7 @@ function undoBoard() {
   }
 
   aiThinking.value = false
+  clearAiThinkingProgress()
   clearAiInsight()
   syncFromBridge()
   resetKey.value += 1
@@ -678,7 +696,8 @@ watchEffect(() => {
               :bridge="bridge"
               :fen="currentFen"
               :bottom-side="humanSide"
-              :highlight-move="lastAiReport?.move || undefined"
+              :highlight-move="aiThinking ? undefined : lastAiReport?.move || undefined"
+              :thinking-move="aiThinkingMove || undefined"
               :interaction-locked="interactionLocked"
               :reset-key="resetKey"
               @fen-change="currentFen = $event"

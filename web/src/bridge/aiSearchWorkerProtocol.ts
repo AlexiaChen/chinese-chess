@@ -1,4 +1,4 @@
-import type { AiMoveReport } from './wasmBridge'
+import type { AiMoveReport, SearchProgress } from './wasmBridge'
 
 export interface AiSearchWorkerRequest {
   type: 'search'
@@ -14,10 +14,16 @@ export interface AiSearchWorkerResult {
   report: AiMoveReport | null
 }
 
+export interface AiSearchWorkerProgress {
+  type: 'progress'
+  requestId: number
+  progress: SearchProgress
+}
+
 export interface AiSearchWorkerError {
   type: 'error'
   requestId: number
   message: string
 }
 
-export type AiSearchWorkerResponse = AiSearchWorkerResult | AiSearchWorkerError
+export type AiSearchWorkerResponse = AiSearchWorkerProgress | AiSearchWorkerResult | AiSearchWorkerError

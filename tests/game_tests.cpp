@@ -32,6 +32,23 @@ bool contains_move(const std::vector<Move>& moves, Move move) {
     return false;
 }
 
+std::vector<Move> collect_all_legal_moves(const GameState& state) {
+    std::vector<Move> moves;
+    for (int rank = 0; rank < chinese_chess::kBoardRanks; ++rank) {
+        for (int file = 0; file < chinese_chess::kBoardFiles; ++file) {
+            const Position from {file, rank};
+            const chinese_chess::Piece piece = state.piece_at(from);
+            if (piece.is_empty() || piece.side != state.side_to_move()) {
+                continue;
+            }
+
+            const auto piece_moves = state.generate_legal_moves(from);
+            moves.insert(moves.end(), piece_moves.begin(), piece_moves.end());
+        }
+    }
+    return moves;
+}
+
 void fen_round_trip_test() {
     const GameState game = GameState::initial();
     expect(
@@ -169,6 +186,38 @@ void search_report_exposes_metadata_test() {
     expect(report.completed_depth >= 1, "Search report should record completed depth");
     expect(report.visited_nodes > 0, "Search report should record visited nodes");
     expect(report.principal_variation.size() >= 1, "Search report should expose a principal variation");
+}
+
+void search_progress_callback_exposes_root_candidates_test() {
+    const GameState game = GameState::from_fen("4k4/9/9/9/4r4/4R4/9/9/9/4K4 w");
+    const std::vector<Move> legal_moves = collect_all_legal_moves(game);
+    std::vector<chinese_chess::engine::SearchProgress> progress_events;
+
+    const auto report = chinese_chess::engine::search_best_move(
+        game,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 3,
+            .time_budget_ms = 0,
+            .progress_callback = [&](const chinese_chess::engine::SearchProgress& progress) {
+                progress_events.push_back(progress);
+            },
+        });
+
+    expect(!progress_events.empty(), "Search progress callback should emit root-candidate events");
+    expect(std::all_of(
+               progress_events.begin(),
+               progress_events.end(),
+               [&](const chinese_chess::engine::SearchProgress& progress) {
+                   return contains_move(legal_moves, progress.current_move);
+               }),
+           "Every progress event should expose a legal root move");
+    expect(std::any_of(
+               progress_events.begin(),
+               progress_events.end(),
+               [&](const chinese_chess::engine::SearchProgress& progress) {
+                   return report.best_move.has_value() && progress.current_move == *report.best_move;
+               }),
+           "Search progress should eventually visit the final best root move");
 }
 
 void search_uses_opening_book_for_red_first_moves_test() {
@@ -322,6 +371,7 @@ int main() {
     search_prefers_winning_capture_test();
     time_budgeted_search_returns_playable_move_test();
     search_report_exposes_metadata_test();
+    search_progress_callback_exposes_root_candidates_test();
     search_uses_opening_book_for_red_first_moves_test();
     search_midgame_node_budget_test();
     feature_based_evaluation_rewards_general_file_pressure_test();

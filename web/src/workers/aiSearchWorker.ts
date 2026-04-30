@@ -21,10 +21,18 @@ self.onmessage = async (event: MessageEvent<AiSearchWorkerRequest>) => {
 
   try {
     const bridge = await getBridge()
-    const report = bridge.searchAiMoveForFenWithReport(
+    const report = bridge.searchAiMoveForFenWithProgress(
       message.fen,
       message.maxDepth,
       message.timeBudgetMs,
+      (progress) => {
+        const response: AiSearchWorkerResponse = {
+          type: 'progress',
+          requestId: message.requestId,
+          progress,
+        }
+        self.postMessage(response)
+      },
     )
     const response: AiSearchWorkerResponse = {
       type: 'result',

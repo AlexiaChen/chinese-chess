@@ -125,3 +125,19 @@
 - **Evidence**: `src/engine/search.h:26`, `tests/game_tests.cpp:236`
 - **Confidence**: 9/10
 - **Action**: For future evaluator work here, prefer direct evaluator assertions when possible so heuristic changes stay reviewable and regressions are easier to catch.
+
+### L-016: [architecture] Browser AI thinking UI should stream real search progress from the shared WASM core (2026-04-30)
+- **Issue**: #81 — 优化界面
+- **Trigger**: worker, wasm, AI thinking, progress, highlight
+- **Pattern**: In this project, a truthful “AI is analyzing this piece” indicator works best when the shared searcher emits progress directly and the Worker forwards it to the main-thread UI. Frontend-only fake animation would drift away from the real search path and become misleading as search limits or move ordering change.
+- **Evidence**: `src/engine/search.cpp:15`, `web/src/workers/aiSearchWorker.ts:24`, `web/src/App.vue:190`, `web/src/components/PhaserBoard.vue:179`
+- **Confidence**: 9/10
+- **Action**: For future browser AI analysis or hint UI, extend the shared WASM search path to publish progress first, then render transient UI from those messages instead of inventing client-only thinking animations.
+
+### L-017: [gotcha] Shared C++ browser-AI changes require rebuilding WASM, not just the web bundle (2026-04-30)
+- **Issue**: #81 — 优化界面
+- **Trigger**: wasm, web-build, stale runtime, preview, browser AI
+- **Pattern**: Updating Vue/Worker code alone does not refresh browser AI behavior when the real change lives in the shared C++ searcher or bridge layer. The page can keep loading an older WASM runtime unless the dedicated WASM build step is rerun alongside the frontend bundle.
+- **Evidence**: `AGENTS.md:48`, `AGENTS.md:49`, `web/src/bridge/wasmBridge.ts:71`, `src/engine/search.cpp:15`
+- **Confidence**: 10/10
+- **Action**: Whenever changing shared browser AI logic in C++ or the WASM bridge, run `make wasm` before or alongside `make web-build`, then validate against a fresh preview session.

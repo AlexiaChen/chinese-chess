@@ -1,5 +1,6 @@
 #include "engine/search.h"
 #include "engine/opening_book.h"
+#include "engine/uci_codec.h"
 
 #include <algorithm>
 #include <array>
@@ -7,6 +8,42 @@
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+EM_JS(void, emit_search_progress_js, (
+    const char* move,
+    int depth,
+    int analyzed_root_moves,
+    int total_root_moves,
+    double visited_nodes), {
+    if (typeof globalThis.__chineseChessHandleSearchProgress === 'function') {
+        globalThis.__chineseChessHandleSearchProgress(
+            UTF8ToString(move),
+            depth,
+            analyzed_root_moves,
+            total_root_moves,
+            visited_nodes);
+        return;
+    }
+    if (typeof Module.chineseChessHandleSearchProgress === 'function') {
+        Module.chineseChessHandleSearchProgress(
+            UTF8ToString(move),
+            depth,
+            analyzed_root_moves,
+            total_root_moves,
+            visited_nodes);
+    }
+});
+#else
+inline void emit_search_progress_js(
+    const char*,
+    int,
+    int,
+    int,
+    double) {}
+#endif
 
 namespace chinese_chess::engine {
 
@@ -50,6 +87,42 @@ struct RootSearchResult {
     Move best_move;
     int best_score {};
 };
+
+void note_search_progress(
+    const SearchContext& context,
+    int depth,
+    const Move& current_move,
+    std::optional<Move> best_move_so_far,
+    int analyzed_root_moves,
+    int total_root_moves) {
+    if (!context.options.progress_callback) {
+        const std::string encoded_move = to_uci_move(current_move);
+        emit_search_progress_js(
+            encoded_move.c_str(),
+            depth,
+            analyzed_root_moves,
+            total_root_moves,
+            static_cast<double>(context.visited_nodes));
+        return;
+    }
+
+    context.options.progress_callback(SearchProgress {
+        .depth = depth,
+        .current_move = current_move,
+        .best_move_so_far = best_move_so_far,
+        .visited_nodes = context.visited_nodes,
+        .analyzed_root_moves = analyzed_root_moves,
+        .total_root_moves = total_root_moves,
+    });
+
+    const std::string encoded_move = to_uci_move(current_move);
+    emit_search_progress_js(
+        encoded_move.c_str(),
+        depth,
+        analyzed_root_moves,
+        total_root_moves,
+        static_cast<double>(context.visited_nodes));
+}
 
 int piece_value(PieceType type) {
     switch (type) {
@@ -612,9 +685,18 @@ RootSearchResult search_root(
     Move best_move = moves.front();
     int best_score = -kInfinityScore;
     const int original_alpha = alpha;
+    std::optional<Move> best_move_so_far;
+    const int total_root_moves = static_cast<int>(moves.size());
 
     for (std::size_t index = 0; index < moves.size(); ++index) {
         const Move& move = moves[index];
+        note_search_progress(
+            context,
+            depth,
+            move,
+            best_move_so_far,
+            static_cast<int>(index),
+            total_root_moves);
         GameState next = state;
         if (!next.apply_move(move)) {
             continue;
@@ -635,6 +717,7 @@ RootSearchResult search_root(
         if (score > best_score) {
             best_score = score;
             best_move = move;
+            best_move_so_far = move;
         }
         alpha = std::max(alpha, score);
     }

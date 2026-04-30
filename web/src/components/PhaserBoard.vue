@@ -36,6 +36,10 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  thinkingMove: {
+    type: String,
+    default: null,
+  },
 })
 
 const emit = defineEmits<{
@@ -79,6 +83,13 @@ type HighlightOverlay = {
   toY: number
   from: string
   to: string
+}
+
+type ThinkingOverlay = {
+  move: string
+  square: string
+  displayFile: number
+  displayRank: number
 }
 
 const sideToMove = computed(() => parseFen(props.fen).sideToMove)
@@ -162,6 +173,24 @@ const highlightOverlay = computed<HighlightOverlay | null>(() => {
     toY: toPoint.y,
     from,
     to,
+  }
+})
+
+const thinkingOverlay = computed<ThinkingOverlay | null>(() => {
+  if (!props.thinkingMove) {
+    return null
+  }
+
+  const square = props.thinkingMove.slice(0, 2)
+  const file = square.charCodeAt(0) - 'a'.charCodeAt(0)
+  const rank = 9 - Number(square[1])
+  const oriented = orientForBottomSide(file, rank, props.bottomSide)
+
+  return {
+    move: props.thinkingMove,
+    square,
+    displayFile: oriented.file,
+    displayRank: oriented.rank,
   }
 })
 
@@ -379,6 +408,15 @@ watch(
         >
           落子 {{ overlay.target }}
         </button>
+
+        <div
+          v-if="thinkingOverlay"
+          :aria-label="`AI 正在分析 ${thinkingOverlay.square}`"
+          :data-thinking-move="thinkingOverlay.move"
+          :data-thinking-square="thinkingOverlay.square"
+          class="pointer-events-none absolute z-[12] -translate-x-1/2 -translate-y-1/2 rounded-lg border-4 border-emerald-300/95 bg-emerald-300/10 shadow-[0_0_0_6px_rgba(16,185,129,0.22),0_0_28px_rgba(110,231,183,0.35)] animate-pulse"
+          :style="percentStyle(thinkingOverlay.displayFile, thinkingOverlay.displayRank, '8.8%', '7.2%')"
+        ></div>
       </div>
     </div>
 
