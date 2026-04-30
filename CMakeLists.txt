@@ -12,6 +12,7 @@ add_library(chinese_chess_core
     src/bridge/browser_session.cpp
     src/bridge/wasm_exports.cpp
     src/core/game.cpp
+    src/engine/opening_book.cpp
     src/engine/pikafish_process.cpp
     src/engine/search.cpp
     src/engine/uci_codec.cpp

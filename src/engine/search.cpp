@@ -1,4 +1,5 @@
 #include "engine/search.h"
+#include "engine/opening_book.h"
 
 #include <algorithm>
 #include <array>
@@ -503,6 +504,17 @@ SearchResult search_best_move(const GameState& state, const SearchOptions& optio
     }
 
     const auto started_at = std::chrono::steady_clock::now();
+    if (const std::optional<Move> book_move = find_opening_book_move(state); book_move.has_value()) {
+        SearchResult result;
+        result.best_move = *book_move;
+        result.principal_variation.push_back(*book_move);
+        result.elapsed_ms = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started_at)
+                .count());
+        return result;
+    }
+
     SearchContext context = make_context(options);
     SearchResult result;
 

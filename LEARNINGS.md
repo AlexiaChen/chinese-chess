@@ -53,3 +53,11 @@
 - **Evidence**: `CMakeLists.txt:62`, `src/bridge/wasm_exports.cpp:72`, `web/src/bridge/wasmBridge.ts:51`
 - **Confidence**: 10/10
 - **Action**: Whenever adding or renaming browser-facing C functions, update the exported symbol list in `CMakeLists.txt` and validate through a real WASM/browser flow, not native tests alone.
+
+### L-007: [architecture] Web AI opening improvements should use an offline shared-core book before search (2026-04-30)
+- **Issue**: #76 — 优化AI执先手的开局胜率
+- **Trigger**: opening book, web AI, GitHub Pages, WASM, first move, repertoire
+- **Pattern**: For this project, browser AI opening improvements cannot depend on live cloud queries or native-only engines. The stable path is a small offline opening book in the shared engine core that answers a few high-quality early positions first, then falls back to normal search when the line leaves the book.
+- **Evidence**: `src/engine/opening_book.cpp:1`, `src/engine/search.cpp:505`, `AGENTS.md:12`
+- **Confidence**: 9/10
+- **Action**: When improving web opening play, extend the shared offline opening book incrementally (mainline first, repertoire later) instead of adding browser-only state or online dependencies.

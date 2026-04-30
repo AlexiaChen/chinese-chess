@@ -10,6 +10,7 @@
 - Shared C++ core built with CMake.
 - Current implemented modules:
   - `src/core/game.h/.cpp`: board state, FEN parsing, legal move generation, move application, and check detection
+  - `src/engine/opening_book.h/.cpp`: offline opening-book lines for early-game AI move selection before full search
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
   - `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, time-budgeted alpha-beta, move ordering, transposition caching, quiescence search, and static evaluation for native/WASM gameplay
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
@@ -59,5 +60,6 @@
 - Browser interaction is split: Phaser renders the board, a board-positioned DOM overlay handles direct board clicks, and a regular DOM action tray exposes selectable pieces and legal moves for automation.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
+- Browser/native AI can short-circuit into the shared offline opening book for early red-side mainline moves before falling back to search.
 - Player-facing AI feedback should use summarized search reports from the WASM bridge (last move, eval, completed depth, visited nodes, elapsed time, PV) instead of streaming every explored node to the UI.
 - GitHub Pages deployment assumes the repository path base `/chinese-chess/`.

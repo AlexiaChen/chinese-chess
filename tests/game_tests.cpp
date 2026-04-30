@@ -171,6 +171,51 @@ void search_report_exposes_metadata_test() {
     expect(report.principal_variation.size() >= 1, "Search report should expose a principal variation");
 }
 
+void search_uses_opening_book_for_red_first_moves_test() {
+    const auto book_move = chinese_chess::engine::search_best_move(
+        GameState::initial(),
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 1,
+            .time_budget_ms = 25,
+        });
+    expect(book_move.best_move.has_value(), "Opening book should still provide a first move");
+    expect(*book_move.best_move == chinese_chess::engine::from_uci_move("b2e2"),
+           "AI playing red should open with the central cannon");
+
+    GameState screen_horse = GameState::initial();
+    expect(screen_horse.apply_move(chinese_chess::engine::from_uci_move("b2e2")),
+           "Central cannon book move should be legal");
+    expect(screen_horse.apply_move(chinese_chess::engine::from_uci_move("h9g7")),
+           "Screen horse defense move should be legal");
+
+    const auto screen_horse_reply = chinese_chess::engine::search_best_move(
+        screen_horse,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 1,
+            .time_budget_ms = 25,
+        });
+    expect(screen_horse_reply.best_move.has_value(), "Opening book should reply to the screen horse defense");
+    expect(*screen_horse_reply.best_move == chinese_chess::engine::from_uci_move("h0g2"),
+           "Central cannon line should develop the supporting right horse");
+
+    GameState central_cannon_reply = GameState::initial();
+    expect(central_cannon_reply.apply_move(chinese_chess::engine::from_uci_move("b2e2")),
+           "Central cannon book move should be legal before testing cannon replies");
+    expect(central_cannon_reply.apply_move(chinese_chess::engine::from_uci_move("h7e7")),
+           "Black central cannon reply should be legal");
+
+    const auto central_cannon_follow_up = chinese_chess::engine::search_best_move(
+        central_cannon_reply,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 1,
+            .time_budget_ms = 25,
+        });
+    expect(central_cannon_follow_up.best_move.has_value(),
+           "Opening book should reply to the central cannon counter");
+    expect(*central_cannon_follow_up.best_move == chinese_chess::engine::from_uci_move("h0g2"),
+           "Central cannon counter line should still develop the right horse");
+}
+
 void browser_session_bridge_test() {
     chinese_chess::bridge::BrowserSession session;
 
@@ -232,6 +277,7 @@ int main() {
     search_prefers_winning_capture_test();
     time_budgeted_search_returns_playable_move_test();
     search_report_exposes_metadata_test();
+    search_uses_opening_book_for_red_first_moves_test();
     browser_session_bridge_test();
     return 0;
 }
