@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
+import type { AiSearchWorkerRequest, AiSearchWorkerResponse } from './bridge/aiSearchWorkerProtocol'
 import type { AiMoveReport, BrowserBridge } from './bridge/wasmBridge'
 import { createWasmBridge } from './bridge/wasmBridge'
 import PhaserBoard from './components/PhaserBoard.vue'
@@ -19,6 +20,16 @@ const undoCount = ref(0)
 
 const AI_MAX_DEPTH = 20
 const AI_TIME_BUDGET_MS = 2000
+
+type PendingAiSearch = {
+  requestId: number
+  resolve: (report: AiMoveReport | null) => void
+  reject: (error: Error) => void
+}
+
+let aiWorker: Worker | null = null
+let nextAiSearchRequestId = 0
+let pendingAiSearch: PendingAiSearch | null = null
 
 declare global {
   interface Window {
@@ -148,6 +159,90 @@ function syncFromBridge() {
   undoCount.value = bridge.value.undoCount()
 }
 
+function disposeAiWorker(resolvePendingWithNull = false) {
+  if (pendingAiSearch) {
+    const pending = pendingAiSearch
+    pendingAiSearch = null
+    if (resolvePendingWithNull) {
+      pending.resolve(null)
+    }
+  }
+
+  if (aiWorker) {
+    aiWorker.terminate()
+    aiWorker = null
+  }
+}
+
+function ensureAiWorker() {
+  if (aiWorker) {
+    return aiWorker
+  }
+
+  const worker = new Worker(new URL('./workers/aiSearchWorker.ts', import.meta.url), { type: 'module' })
+  worker.onmessage = (event: MessageEvent<AiSearchWorkerResponse>) => {
+    const message = event.data
+    if (!pendingAiSearch || message.requestId !== pendingAiSearch.requestId) {
+      return
+    }
+
+    const pending = pendingAiSearch
+    pendingAiSearch = null
+    if (message.type === 'result') {
+      pending.resolve(message.report)
+      return
+    }
+
+    worker.terminate()
+    aiWorker = null
+    pending.reject(new Error(message.message))
+  }
+  worker.onerror = () => {
+    const pending = pendingAiSearch
+    pendingAiSearch = null
+    worker.terminate()
+    aiWorker = null
+    pending?.reject(new Error('AI Worker 运行失败'))
+  }
+
+  aiWorker = worker
+  return worker
+}
+
+function requestAiMoveReport(
+  fen: string,
+  maxDepth: number,
+  timeBudgetMs: number,
+): Promise<AiMoveReport | null> {
+  if (pendingAiSearch) {
+    disposeAiWorker(true)
+  }
+
+  const worker = ensureAiWorker()
+  return new Promise<AiMoveReport | null>((resolve, reject) => {
+    const requestId = ++nextAiSearchRequestId
+    pendingAiSearch = {
+      requestId,
+      resolve,
+      reject,
+    }
+
+    const message: AiSearchWorkerRequest = {
+      type: 'search',
+      requestId,
+      fen,
+      maxDepth,
+      timeBudgetMs,
+    }
+    worker.postMessage(message)
+  })
+}
+
+function cancelAiSearch() {
+  aiThinking.value = false
+  disposeAiWorker(true)
+}
+
 async function maybeRunAiTurn() {
   if (!bridge.value || !aiEnabled.value || aiThinking.value || activeSideToken.value !== aiSide.value) {
     return
@@ -158,11 +253,33 @@ async function maybeRunAiTurn() {
   refreshBridgeStatus()
   await nextTick()
 
-  const aiReport = bridge.value.applyAiMoveWithReport(AI_MAX_DEPTH, AI_TIME_BUDGET_MS)
+  let aiReport: AiMoveReport | null = null
+  try {
+    aiReport = await requestAiMoveReport(fenBeforeAiMove, AI_MAX_DEPTH, AI_TIME_BUDGET_MS)
+  } catch (error) {
+    aiThinking.value = false
+    bridgeStatus.value = 'AI 搜索失败，请稍后重试。'
+    return
+  }
   aiThinking.value = false
 
   if (!aiReport) {
+    if (!bridge.value || !aiEnabled.value || currentFen.value !== fenBeforeAiMove) {
+      refreshBridgeStatus()
+      return
+    }
+
     bridgeStatus.value = 'AI 当前无合法着法，对局结束。'
+    return
+  }
+
+  if (!bridge.value || !aiEnabled.value || activeSideToken.value !== aiSide.value || currentFen.value !== fenBeforeAiMove) {
+    refreshBridgeStatus()
+    return
+  }
+
+  if (!bridge.value.applyMove(aiReport.move)) {
+    bridgeStatus.value = 'AI 返回了非法着法，请重试。'
     return
   }
 
@@ -173,7 +290,7 @@ async function maybeRunAiTurn() {
 }
 
 function resetBoard() {
-  aiThinking.value = false
+  cancelAiSearch()
   clearAiInsight()
   if (bridge.value) {
     bridge.value.reset()
@@ -203,6 +320,9 @@ function undoBoard() {
 }
 
 function setAiEnabled(enabled: boolean) {
+  if (!enabled && aiThinking.value) {
+    cancelAiSearch()
+  }
   aiEnabled.value = enabled
 }
 
@@ -224,6 +344,10 @@ onMounted(async () => {
   } catch (error) {
     bridgeStatus.value = '规则模块加载失败，请刷新页面后重试。'
   }
+})
+
+onBeforeUnmount(() => {
+  disposeAiWorker(true)
 })
 
 watch([currentFen, aiEnabled, bridge, humanSide], () => {

@@ -278,6 +278,24 @@ void browser_session_bridge_test() {
            "Browser session AI report should include a principal variation");
 }
 
+void browser_session_fen_search_does_not_mutate_live_state_test() {
+    chinese_chess::bridge::BrowserSession session;
+    expect(session.apply_move("a3a4"), "Live browser session should accept a human move before worker-style search");
+
+    const std::string fen_before_search = session.current_fen();
+    const std::size_t undo_before_search = session.undo_count();
+    const auto ai_report = chinese_chess::bridge::BrowserSession::search_ai_move_for_fen(
+        fen_before_search,
+        4,
+        25);
+
+    expect(!ai_report.move.empty(), "FEN-based AI search should still return a move report");
+    expect(session.current_fen() == fen_before_search,
+           "FEN-based AI search should not mutate the live browser session state");
+    expect(session.undo_count() == undo_before_search,
+           "FEN-based AI search should not touch the live browser session undo history");
+}
+
 }  // namespace
 
 int main() {
@@ -296,5 +314,6 @@ int main() {
     search_uses_opening_book_for_red_first_moves_test();
     search_midgame_node_budget_test();
     browser_session_bridge_test();
+    browser_session_fen_search_does_not_mutate_live_state_test();
     return 0;
 }

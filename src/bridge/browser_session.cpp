@@ -7,8 +7,46 @@
 
 namespace chinese_chess::bridge {
 
+namespace {
+
+AiMoveReport to_ai_move_report(const engine::SearchResult& search_result) {
+    if (!search_result.best_move.has_value()) {
+        return {};
+    }
+
+    AiMoveReport report {
+        .move = engine::to_uci_move(*search_result.best_move),
+        .score = search_result.score,
+        .completed_depth = search_result.completed_depth,
+        .visited_nodes = search_result.visited_nodes,
+        .elapsed_ms = search_result.elapsed_ms,
+        .timed_out = search_result.timed_out,
+    };
+    report.principal_variation.reserve(search_result.principal_variation.size());
+    for (const Move& move : search_result.principal_variation) {
+        report.principal_variation.push_back(engine::to_uci_move(move));
+    }
+
+    return report;
+}
+
+}  // namespace
+
 BrowserSession::BrowserSession() :
     state_(GameState::initial()) {}
+
+AiMoveReport BrowserSession::search_ai_move_for_fen(
+    std::string_view fen,
+    int max_depth,
+    int time_budget_ms) {
+    const GameState state = GameState::from_fen(fen);
+    return to_ai_move_report(engine::search_best_move(
+        state,
+        engine::SearchOptions {
+            .max_depth = max_depth,
+            .time_budget_ms = time_budget_ms,
+        }));
+}
 
 std::string BrowserSession::current_fen() const {
     return state_.to_fen();
@@ -58,20 +96,7 @@ AiMoveReport BrowserSession::apply_ai_move_with_report(int max_depth, int time_b
         throw std::runtime_error("AI selected an illegal move");
     }
 
-    AiMoveReport report {
-        .move = engine::to_uci_move(*search_result.best_move),
-        .score = search_result.score,
-        .completed_depth = search_result.completed_depth,
-        .visited_nodes = search_result.visited_nodes,
-        .elapsed_ms = search_result.elapsed_ms,
-        .timed_out = search_result.timed_out,
-    };
-    report.principal_variation.reserve(search_result.principal_variation.size());
-    for (const Move& move : search_result.principal_variation) {
-        report.principal_variation.push_back(engine::to_uci_move(move));
-    }
-
-    return report;
+    return to_ai_move_report(search_result);
 }
 
 bool BrowserSession::undo_last_move() {

@@ -85,3 +85,19 @@
 - **Evidence**: `src/engine/search.cpp:154`, `src/engine/search.cpp:374`
 - **Confidence**: 8/10
 - **Action**: When tuning null-move pruning here, treat low-material positions cautiously and keep verification search in the loop instead of enabling broad unconditional cutoffs.
+
+### L-011: [architecture] Worker-based browser AI should search from FEN snapshots, not own the authoritative session (2026-04-30)
+- **Issue**: #79 — 增加异步Worker搜索
+- **Trigger**: Web Worker, browser AI, WASM, FEN snapshot, session state, async search
+- **Pattern**: For this project the stable Worker split is: main thread keeps the authoritative `BrowserSession`, while the Worker receives a FEN snapshot, runs search off-thread, and returns a move/report for the main thread to apply. Letting the Worker own the live session would complicate undo/reset/state sync.
+- **Evidence**: `web/src/App.vue:246`, `web/src/workers/aiSearchWorker.ts:16`, `src/bridge/browser_session.cpp:38`
+- **Confidence**: 10/10
+- **Action**: For future async AI or analysis features, keep state mutation on the main thread and make Worker search APIs pure over serialized inputs like FEN.
+
+### L-012: [gotcha] Browser WASM search cancellation can start with Worker termination before deeper engine-level interrupts exist (2026-04-30)
+- **Issue**: #79 — 增加异步Worker搜索
+- **Trigger**: Worker cancellation, async search, WASM, reset, stale result, terminate
+- **Pattern**: A full engine-level cancel signal would be nicer, but a reliable first step is to terminate the in-flight Worker and ignore stale replies. That is enough to unblock UI architecture work before adding internal search interruption support.
+- **Evidence**: `web/src/App.vue:162`, `web/src/App.vue:241`, `web/src/workers/aiSearchWorker.ts:16`
+- **Confidence**: 8/10
+- **Action**: When adding async search here, ship Worker lifecycle cancellation first; add fine-grained search interrupts only after the message flow is stable.

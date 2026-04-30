@@ -24,6 +24,11 @@ class BrowserSession {
 public:
     BrowserSession();
 
+    [[nodiscard]] static AiMoveReport search_ai_move_for_fen(
+        std::string_view fen,
+        int max_depth,
+        int time_budget_ms);
+
     [[nodiscard]] std::string current_fen() const;
     [[nodiscard]] Side side_to_move() const;
     [[nodiscard]] std::vector<std::string> legal_moves_from(std::string_view square) const;

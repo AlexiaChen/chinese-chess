@@ -16,6 +16,11 @@ export interface BrowserBridge {
   undoCount: () => number
   applyAiMove: (maxDepth: number, timeBudgetMs?: number) => string | null
   applyAiMoveWithReport: (maxDepth: number, timeBudgetMs: number) => AiMoveReport | null
+  searchAiMoveForFenWithReport: (
+    fen: string,
+    maxDepth: number,
+    timeBudgetMs: number,
+  ) => AiMoveReport | null
   reset: () => void
 }
 
@@ -63,6 +68,9 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
     'string',
     ['number', 'number'],
   )
+  const searchAiMoveForFenWithReport = runtime.cwrap<
+    (fen: string, maxDepth: number, timeBudgetMs: number) => string
+  >('chinese_chess_search_ai_move_for_fen_with_report', 'string', ['string', 'number', 'number'])
   const reset = runtime.cwrap<() => void>('chinese_chess_reset', null, [])
 
   return {
@@ -88,7 +96,17 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
         return null
       }
 
-      return JSON.parse(raw) as AiMoveReport
+      const report = JSON.parse(raw) as AiMoveReport
+      return report.move.length > 0 ? report : null
+    },
+    searchAiMoveForFenWithReport(fen: string, maxDepth: number, timeBudgetMs: number) {
+      const raw = searchAiMoveForFenWithReport(fen, maxDepth, timeBudgetMs)
+      if (raw.length === 0) {
+        return null
+      }
+
+      const report = JSON.parse(raw) as AiMoveReport
+      return report.move.length > 0 ? report : null
     },
     reset,
   }

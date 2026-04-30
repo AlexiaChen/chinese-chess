@@ -96,6 +96,19 @@ const char* chinese_chess_apply_ai_move_with_report(int max_depth, int time_budg
     return buffer.c_str();
 }
 
+const char* chinese_chess_search_ai_move_for_fen_with_report(
+    const char* fen,
+    int max_depth,
+    int time_budget_ms) {
+    auto& buffer = chinese_chess::bridge::shared_buffer();
+    buffer = chinese_chess::bridge::to_json(
+        chinese_chess::bridge::BrowserSession::search_ai_move_for_fen(
+            fen,
+            max_depth,
+            time_budget_ms));
+    return buffer.c_str();
+}
+
 void chinese_chess_reset() {
     chinese_chess::bridge::session().reset();
 }
