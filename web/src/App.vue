@@ -17,7 +17,7 @@ const lastAiReport = ref<AiMoveReport | null>(null)
 const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
 
-const AI_MAX_DEPTH = 10
+const AI_MAX_DEPTH = 20
 const AI_TIME_BUDGET_MS = 450
 
 declare global {
@@ -82,6 +82,7 @@ const undoHint = computed(() =>
 )
 const setupTips: string[] = [
   '支持选择我先或 AI 先，开局会自动按选定方落子。',
+  '棋盘会自动让玩家一方保持在下方，避免操作河对面的棋子。',
   'AI 上一步会在棋盘上高亮路径，并在侧边栏展示评估、深度、节点数与主变化线。',
   '关闭 AI 后仍可作为双人对弈棋盘使用。',
 ]
@@ -552,6 +553,7 @@ watchEffect(() => {
             <PhaserBoard
               :bridge="bridge"
               :fen="currentFen"
+              :bottom-side="humanSide"
               :highlight-move="lastAiReport?.move || undefined"
               :interaction-locked="interactionLocked"
               :reset-key="resetKey"

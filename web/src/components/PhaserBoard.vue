@@ -2,7 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import type { BrowserBridge } from '../bridge/wasmBridge'
-import { BOARD_METRICS, pointFor } from '../game/boardMetrics'
+import {
+  BOARD_METRICS,
+  orientForBottomSide,
+  pointForBottomSide,
+  type BoardBottomSide,
+} from '../game/boardMetrics'
 import { createBoardGame, type BoardGameHandle } from '../game/boardScene'
 import { parseFen, pieceDisplayName, toUciSquare } from '../game/fen'
 
@@ -22,6 +27,10 @@ const props = defineProps({
   interactionLocked: {
     type: Boolean,
     default: false,
+  },
+  bottomSide: {
+    type: String as () => BoardBottomSide,
+    default: 'w',
   },
   highlightMove: {
     type: String,
@@ -46,6 +55,8 @@ type PieceOverlay = {
   square: string
   file: number
   rank: number
+  displayFile: number
+  displayRank: number
   isSelected: boolean
   isActiveSide: boolean
   label: string
@@ -56,6 +67,8 @@ type MoveOverlay = {
   target: string
   file: number
   rank: number
+  displayFile: number
+  displayRank: number
 }
 
 type HighlightOverlay = {
@@ -80,6 +93,7 @@ const pieceOverlays = computed<PieceOverlay[]>(() => {
     const file = index % 9
     const rank = Math.floor(index / 9)
     const square = toUciSquare(file, rank)
+    const oriented = orientForBottomSide(file, rank, props.bottomSide)
     const isRedPiece = piece === piece.toUpperCase()
     const isActiveSide = position.sideToMove === 'w' ? isRedPiece : !isRedPiece
 
@@ -90,6 +104,8 @@ const pieceOverlays = computed<PieceOverlay[]>(() => {
         square,
         file,
         rank,
+        displayFile: oriented.file,
+        displayRank: oriented.rank,
         isSelected: selectedSquare.value === square,
         isActiveSide,
         label: `${isRedPiece ? '红方' : '黑方'}${pieceDisplayName(piece)} ${square}`,
@@ -106,6 +122,16 @@ const moveOverlays = computed<MoveOverlay[]>(() =>
       target,
       file: target.charCodeAt(0) - 'a'.charCodeAt(0),
       rank: 9 - Number(target[1]),
+      displayFile: orientForBottomSide(
+        target.charCodeAt(0) - 'a'.charCodeAt(0),
+        9 - Number(target[1]),
+        props.bottomSide,
+      ).file,
+      displayRank: orientForBottomSide(
+        target.charCodeAt(0) - 'a'.charCodeAt(0),
+        9 - Number(target[1]),
+        props.bottomSide,
+      ).rank,
     }
   }),
 )
@@ -117,8 +143,16 @@ const highlightOverlay = computed<HighlightOverlay | null>(() => {
 
   const from = props.highlightMove.slice(0, 2)
   const to = props.highlightMove.slice(2, 4)
-  const fromPoint = pointFor(from.charCodeAt(0) - 'a'.charCodeAt(0), 9 - Number(from[1]))
-  const toPoint = pointFor(to.charCodeAt(0) - 'a'.charCodeAt(0), 9 - Number(to[1]))
+  const fromPoint = pointForBottomSide(
+    from.charCodeAt(0) - 'a'.charCodeAt(0),
+    9 - Number(from[1]),
+    props.bottomSide,
+  )
+  const toPoint = pointForBottomSide(
+    to.charCodeAt(0) - 'a'.charCodeAt(0),
+    9 - Number(to[1]),
+    props.bottomSide,
+  )
 
   return {
     move: props.highlightMove,
@@ -132,7 +166,7 @@ const highlightOverlay = computed<HighlightOverlay | null>(() => {
 })
 
 function percentStyle(file: number, rank: number, widthPercent: string, heightPercent: string) {
-  const point = pointFor(file, rank)
+  const point = pointForBottomSide(file, rank, 'w')
   return {
     left: `${(point.x / BOARD_METRICS.width) * 100}%`,
     top: `${(point.y / BOARD_METRICS.height) * 100}%`,
@@ -209,6 +243,7 @@ onMounted(() => {
   boardGame = createBoardGame(container.value, {
     bridge: props.bridge,
     fen: props.fen,
+    bottomSide: props.bottomSide,
     onFenChange: (fen) => emit('fen-change', fen),
     onMoveApplied: (move) => emit('move-applied', move),
   })
@@ -248,6 +283,14 @@ watch(
     }
   },
   { immediate: true },
+)
+
+watch(
+  () => props.bottomSide,
+  (bottomSide) => {
+    boardGame?.setBottomSide(bottomSide)
+    clearSelection(`当前轮到${sideToMove.value === 'w' ? '红方' : '黑方'}行棋`)
+  },
 )
 
 watch(
@@ -318,7 +361,7 @@ watch(
                 ? 'border-white/0 bg-transparent hover:border-amber-200/45 hover:bg-amber-100/5'
                 : 'border-white/0 bg-transparent'
           "
-          :style="percentStyle(overlay.file, overlay.rank, '8.8%', '7.2%')"
+          :style="percentStyle(overlay.displayFile, overlay.displayRank, '8.8%', '7.2%')"
           @click="handlePieceClick(overlay)"
         >
           <span class="sr-only">{{ overlay.label }}</span>
@@ -331,7 +374,7 @@ watch(
           :data-move="overlay.move"
           :disabled="props.interactionLocked"
           class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100/80 bg-orange-500/85 text-[0px] shadow-[0_0_0_5px_rgba(249,115,22,0.18)] transition hover:scale-110"
-          :style="percentStyle(overlay.file, overlay.rank, '3.8%', '3.4%')"
+          :style="percentStyle(overlay.displayFile, overlay.displayRank, '3.8%', '3.4%')"
           @click="handleMoveClick(overlay.move)"
         >
           落子 {{ overlay.target }}

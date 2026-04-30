@@ -61,3 +61,11 @@
 - **Evidence**: `src/engine/opening_book.cpp:1`, `src/engine/search.cpp:505`, `AGENTS.md:12`
 - **Confidence**: 9/10
 - **Action**: When improving web opening play, extend the shared offline opening book incrementally (mainline first, repertoire later) instead of adding browser-only state or online dependencies.
+
+### L-008: [architecture] Board-side UX fixes should flip the view, not the rules (2026-04-30)
+- **Issue**: #77 — 修改一下功能和体验
+- **Trigger**: board flip, perspective, black side, UX, river side, DOM overlay
+- **Pattern**: When the player should control the near-side army, the correct fix is a view-only board flip that remaps rendered coordinates, river labels, highlights, and click overlays together. Swapping rule-layer red/black identity would unnecessarily ripple through AI side, turn logic, and FEN semantics.
+- **Evidence**: `web/src/game/boardMetrics.ts:12`, `web/src/game/boardScene.ts:44`, `web/src/components/PhaserBoard.vue:73`, `AGENTS.md:60`
+- **Confidence**: 10/10
+- **Action**: For future side-orientation UX work, keep the rules/FEN stable and implement perspective changes entirely in the browser view layer.

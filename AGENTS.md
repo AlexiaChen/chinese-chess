@@ -58,6 +58,7 @@
 - The current frontend stack is fixed to Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser per user direction.
 - The current browser/WASM boundary is defined in C++ first; Emscripten tooling is installed locally under `~/.local/emsdk`.
 - Browser interaction is split: Phaser renders the board, a board-positioned DOM overlay handles direct board clicks, and a regular DOM action tray exposes selectable pieces and legal moves for automation.
+- Board presentation is view-only and can flip automatically with the player's side so the human-controlled army stays on the near side while rules/FEN remain unchanged.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
 - Browser/native AI can short-circuit into the shared offline opening book for early red-side mainline moves before falling back to search.

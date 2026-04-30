@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 
 import type { BrowserBridge } from '../bridge/wasmBridge'
-import { BOARD_METRICS, pointFor } from './boardMetrics'
+import { BOARD_METRICS, pointFor, pointForBottomSide, type BoardBottomSide } from './boardMetrics'
 import { parseFen, PIECE_LABELS } from './fen'
 
 const COLORS = {
@@ -16,22 +16,29 @@ const COLORS = {
 class XiangqiBoardScene extends Phaser.Scene {
   currentFen: string
   bridge: BrowserBridge | null
+  bottomSide: BoardBottomSide
   onFenChange: (fen: string) => void
   onMoveApplied: (move: string) => void
   pieceLayer: Phaser.GameObjects.Container | null
+  leftRiverLabel: Phaser.GameObjects.Text | null
+  rightRiverLabel: Phaser.GameObjects.Text | null
 
   constructor(
     initialFen: string,
     bridge: BrowserBridge | null,
+    bottomSide: BoardBottomSide,
     onFenChange: (fen: string) => void,
     onMoveApplied: (move: string) => void,
   ) {
     super('xiangqi-board')
     this.currentFen = initialFen
     this.bridge = bridge
+    this.bottomSide = bottomSide
     this.onFenChange = onFenChange
     this.onMoveApplied = onMoveApplied
     this.pieceLayer = null
+    this.leftRiverLabel = null
+    this.rightRiverLabel = null
   }
 
   setFen(fen: string): void {
@@ -43,6 +50,14 @@ class XiangqiBoardScene extends Phaser.Scene {
 
   setBridge(bridge: BrowserBridge | null): void {
     this.bridge = bridge
+  }
+
+  setBottomSide(bottomSide: BoardBottomSide): void {
+    this.bottomSide = bottomSide
+    this.updateRiverLabel()
+    if (this.pieceLayer) {
+      this.renderPieces()
+    }
   }
 
   create(): void {
@@ -119,23 +134,38 @@ class XiangqiBoardScene extends Phaser.Scene {
   drawRiverLabel(): void {
     const midY = (pointFor(0, 4).y + pointFor(0, 5).y) / 2
 
-    this.add
-      .text(BOARD_METRICS.width * 0.27, midY, '楚河', {
+    this.leftRiverLabel = this.add
+      .text(BOARD_METRICS.width * 0.27, midY, '', {
         fontFamily: '"Kaiti SC", "STKaiti", "KaiTi", serif',
         fontSize: '38px',
         color: '#6f4b2c',
       })
       .setOrigin(0.5)
-      .setRotation(-0.02)
+    this.rightRiverLabel = this.add
+      .text(BOARD_METRICS.width * 0.73, midY, '', {
+        fontFamily: '"Kaiti SC", "STKaiti", "KaiTi", serif',
+        fontSize: '38px',
+        color: '#6f4b2c',
+      })
+      .setOrigin(0.5)
 
-    this.add
-      .text(BOARD_METRICS.width * 0.73, midY, '汉界', {
-        fontFamily: '"Kaiti SC", "STKaiti", "KaiTi", serif',
-        fontSize: '38px',
-        color: '#6f4b2c',
-      })
-      .setOrigin(0.5)
-      .setRotation(0.02)
+    this.updateRiverLabel()
+  }
+
+  updateRiverLabel(): void {
+    if (!this.leftRiverLabel || !this.rightRiverLabel) {
+      return
+    }
+
+    const leftText = this.bottomSide === 'w' ? '楚河' : '汉界'
+    const rightText = this.bottomSide === 'w' ? '汉界' : '楚河'
+    const leftRotation = this.bottomSide === 'w' ? -0.02 : 0.02
+    const rightRotation = this.bottomSide === 'w' ? 0.02 : -0.02
+
+    this.leftRiverLabel.setText(leftText)
+    this.leftRiverLabel.setRotation(leftRotation)
+    this.rightRiverLabel.setText(rightText)
+    this.rightRiverLabel.setRotation(rightRotation)
   }
 
   renderPieces(): void {
@@ -153,7 +183,7 @@ class XiangqiBoardScene extends Phaser.Scene {
 
       const file = index % 9
       const rank = Math.floor(index / 9)
-      const point = pointFor(file, rank)
+      const point = pointForBottomSide(file, rank, this.bottomSide)
       const isRed = piece === piece.toUpperCase()
       const container = this.add.container(point.x, point.y)
       const shadow = this.add.circle(2, 4, BOARD_METRICS.pieceRadius, 0x000000, 0.14)
@@ -189,11 +219,13 @@ export interface BoardGameHandle {
   destroy: () => void
   setFen: (fen: string) => void
   setBridge: (bridge: BrowserBridge | null) => void
+  setBottomSide: (bottomSide: BoardBottomSide) => void
 }
 
 interface CreateBoardGameOptions {
   bridge: BrowserBridge | null
   fen: string
+  bottomSide: BoardBottomSide
   onFenChange: (fen: string) => void
   onMoveApplied: (move: string) => void
 }
@@ -205,6 +237,7 @@ export function createBoardGame(
   const scene = new XiangqiBoardScene(
     options.fen,
     options.bridge,
+    options.bottomSide,
     options.onFenChange,
     options.onMoveApplied,
   )
@@ -226,6 +259,9 @@ export function createBoardGame(
     },
     setBridge(bridge: BrowserBridge | null) {
       scene.setBridge(bridge)
+    },
+    setBottomSide(bottomSide: BoardBottomSide) {
+      scene.setBottomSide(bottomSide)
     },
   }
 }
