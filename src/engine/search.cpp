@@ -17,6 +17,7 @@ constexpr int kInfinityScore = 2'000'000;
 constexpr int kHistoryTableSize = kBoardSquares * kBoardSquares;
 constexpr int kMaxPly = 64;
 constexpr std::size_t kTranspositionTableSize = 1U << 16;
+constexpr int kInitialAspirationWindow = 48;
 
 enum class BoundType {
     Exact,
@@ -148,6 +149,38 @@ int move_index(const Move& move) {
 
 bool is_capture(const GameState& state, const Move& move) {
     return !state.piece_at(move.to).is_empty();
+}
+
+bool has_null_move_material(const GameState& state, Side side) {
+    int heavy_piece_count = 0;
+    int soldier_count = 0;
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Piece piece = state.piece_at(Position {file, rank});
+            if (piece.is_empty() || piece.side != side) {
+                continue;
+            }
+
+            switch (piece.type) {
+            case PieceType::Rook:
+            case PieceType::Horse:
+            case PieceType::Cannon:
+                ++heavy_piece_count;
+                break;
+            case PieceType::Soldier:
+                ++soldier_count;
+                break;
+            case PieceType::General:
+            case PieceType::Advisor:
+            case PieceType::Elephant:
+            case PieceType::None:
+                break;
+            }
+        }
+    }
+
+    return heavy_piece_count >= 2 || (heavy_piece_count >= 1 && soldier_count >= 3);
 }
 
 Side opposite(Side side) {
@@ -310,7 +343,14 @@ void order_moves(
 
 int quiescence(const GameState& state, SearchContext& context, int alpha, int beta, int ply);
 
-int negamax(const GameState& state, SearchContext& context, int depth, int alpha, int beta, int ply) {
+int negamax(
+    const GameState& state,
+    SearchContext& context,
+    int depth,
+    int alpha,
+    int beta,
+    int ply,
+    bool allow_null_move) {
     check_timeout(context);
     if (context.timed_out) {
         return evaluate_for_side_to_move(state);
@@ -337,6 +377,46 @@ int negamax(const GameState& state, SearchContext& context, int depth, int alpha
         return quiescence(state, context, alpha, beta, ply);
     }
 
+    if (allow_null_move && depth >= 3 && !state.is_in_check(state.side_to_move())
+        && has_null_move_material(state, state.side_to_move())) {
+        const int static_eval = evaluate_for_side_to_move(state);
+        if (static_eval >= beta) {
+            const int reduction = 2 + depth / 3;
+            const GameState null_state = state.pass_turn();
+            const int score = -negamax(
+                null_state,
+                context,
+                std::max(0, depth - reduction - 1),
+                -beta,
+                -beta + 1,
+                ply + 1,
+                false);
+            if (context.timed_out) {
+                return static_eval;
+            }
+            if (score >= beta) {
+                if (depth <= 6) {
+                    return beta;
+                }
+
+                const int verification_score = negamax(
+                    state,
+                    context,
+                    std::max(0, depth - reduction - 1),
+                    beta - 1,
+                    beta,
+                    ply,
+                    false);
+                if (context.timed_out) {
+                    return static_eval;
+                }
+                if (verification_score >= beta) {
+                    return beta;
+                }
+            }
+        }
+    }
+
     std::vector<Move> moves = generate_all_legal_moves(state);
     if (moves.empty()) {
         return -kMateScore + ply;
@@ -352,7 +432,7 @@ int negamax(const GameState& state, SearchContext& context, int depth, int alpha
             continue;
         }
 
-        const int score = -negamax(next, context, depth - 1, -beta, -alpha, ply + 1);
+        const int score = -negamax(next, context, depth - 1, -beta, -alpha, ply + 1, true);
         if (context.timed_out) {
             break;
         }
@@ -442,7 +522,12 @@ std::optional<Move> fallback_best_move(const GameState& state) {
     return moves.front();
 }
 
-RootSearchResult search_root(const GameState& state, SearchContext& context, int depth) {
+RootSearchResult search_root(
+    const GameState& state,
+    SearchContext& context,
+    int depth,
+    int alpha,
+    int beta) {
     std::vector<Move> moves = generate_all_legal_moves(state);
     if (moves.empty()) {
         throw std::runtime_error("No legal moves available");
@@ -455,16 +540,24 @@ RootSearchResult search_root(const GameState& state, SearchContext& context, int
 
     Move best_move = moves.front();
     int best_score = -kInfinityScore;
-    int alpha = -kInfinityScore;
-    const int beta = kInfinityScore;
+    const int original_alpha = alpha;
 
-    for (const Move& move : moves) {
+    for (std::size_t index = 0; index < moves.size(); ++index) {
+        const Move& move = moves[index];
         GameState next = state;
         if (!next.apply_move(move)) {
             continue;
         }
 
-        const int score = -negamax(next, context, depth - 1, -beta, -alpha, 1);
+        int score;
+        if (index == 0) {
+            score = -negamax(next, context, depth - 1, -beta, -alpha, 1, true);
+        } else {
+            score = -negamax(next, context, depth - 1, -alpha - 1, -alpha, 1, true);
+            if (!context.timed_out && score > alpha && score < beta) {
+                score = -negamax(next, context, depth - 1, -beta, -alpha, 1, true);
+            }
+        }
         if (context.timed_out) {
             break;
         }
@@ -475,7 +568,13 @@ RootSearchResult search_root(const GameState& state, SearchContext& context, int
         alpha = std::max(alpha, score);
     }
 
-    store_entry(context, key, depth, best_score, BoundType::Exact, best_move);
+    BoundType bound = BoundType::Exact;
+    if (best_score <= original_alpha) {
+        bound = BoundType::Upper;
+    } else if (best_score >= beta) {
+        bound = BoundType::Lower;
+    }
+    store_entry(context, key, depth, best_score, bound, best_move);
     return RootSearchResult {
         .best_move = best_move,
         .best_score = best_score,
@@ -520,7 +619,29 @@ SearchResult search_best_move(const GameState& state, const SearchOptions& optio
 
     for (int depth = 1; depth <= options.max_depth; ++depth) {
         context.timed_out = false;
-        const RootSearchResult candidate = search_root(state, context, depth);
+        RootSearchResult candidate {};
+        if (depth >= 2 && result.best_move.has_value()) {
+            int window = kInitialAspirationWindow;
+            while (true) {
+                const int alpha = std::max(-kInfinityScore, result.score - window);
+                const int beta = std::min(kInfinityScore, result.score + window);
+                candidate = search_root(state, context, depth, alpha, beta);
+                if (context.timed_out) {
+                    break;
+                }
+                if (candidate.best_score <= alpha || candidate.best_score >= beta) {
+                    window *= 2;
+                    if (window >= kInfinityScore / 2) {
+                        candidate = search_root(state, context, depth, -kInfinityScore, kInfinityScore);
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+        } else {
+            candidate = search_root(state, context, depth, -kInfinityScore, kInfinityScore);
+        }
         if (context.timed_out) {
             result.timed_out = true;
             break;

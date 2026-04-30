@@ -69,3 +69,19 @@
 - **Evidence**: `web/src/game/boardMetrics.ts:12`, `web/src/game/boardScene.ts:44`, `web/src/components/PhaserBoard.vue:73`, `AGENTS.md:60`
 - **Confidence**: 10/10
 - **Action**: For future side-orientation UX work, keep the rules/FEN stable and implement perspective changes entirely in the browser view layer.
+
+### L-009: [gotcha] Browser AI budget increases should be benchmarked against search efficiency, not just raised blindly (2026-04-30)
+- **Issue**: #78 — 强化AI智能和棋力
+- **Trigger**: browser AI, WASM, time budget, blocking, performance, search depth
+- **Pattern**: In this repo the browser AI search runs synchronously on the UI thread. Raising the default budget can increase wait time without proportionate strength gains; a sampled midgame went from 2000ms to 5000ms without completing an extra depth, while search-efficiency improvements materially reduced node count.
+- **Evidence**: `web/src/App.vue:161`, `tests/game_tests.cpp:219`, `src/engine/search.cpp:340`
+- **Confidence**: 9/10
+- **Action**: Before increasing browser AI think time again, benchmark whether the extra budget actually buys more completed depth or stronger choices; prefer search-efficiency improvements first.
+
+### L-010: [gotcha] Xiangqi null-move pruning should stay conservative and use verification search (2026-04-30)
+- **Issue**: #78 — 强化AI智能和棋力
+- **Trigger**: null move pruning, search heuristic, endgame, verification search, zugzwang
+- **Pattern**: Direct null-move pruning is risky in low-material Xiangqi positions. In this codebase it is safer to gate the heuristic on remaining material and verify fail-high results before accepting the cutoff.
+- **Evidence**: `src/engine/search.cpp:154`, `src/engine/search.cpp:374`
+- **Confidence**: 8/10
+- **Action**: When tuning null-move pruning here, treat low-material positions cautiously and keep verification search in the loop instead of enabling broad unconditional cutoffs.

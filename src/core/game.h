@@ -70,6 +70,7 @@ public:
     [[nodiscard]] bool is_legal_move(const Move& move) const;
     [[nodiscard]] bool is_in_check(Side side) const;
     [[nodiscard]] bool generals_facing() const;
+    [[nodiscard]] GameState pass_turn() const;
 
     bool apply_move(const Move& move);
 

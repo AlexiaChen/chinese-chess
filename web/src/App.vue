@@ -18,7 +18,7 @@ const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
 
 const AI_MAX_DEPTH = 20
-const AI_TIME_BUDGET_MS = 450
+const AI_TIME_BUDGET_MS = 2000
 
 declare global {
   interface Window {

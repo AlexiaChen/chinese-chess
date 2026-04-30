@@ -12,7 +12,7 @@
   - `src/core/game.h/.cpp`: board state, FEN parsing, legal move generation, move application, and check detection
   - `src/engine/opening_book.h/.cpp`: offline opening-book lines for early-game AI move selection before full search
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
-  - `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, time-budgeted alpha-beta, move ordering, transposition caching, quiescence search, and static evaluation for native/WASM gameplay
+  - `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, aspiration windows, root PVS, null-move pruning, move ordering, transposition caching, quiescence search, and static evaluation for native/WASM gameplay
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
 - `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine, including move history for browser-side undo
 - `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `apply_move`, `undo_last_move`, `undo_count`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `reset`)
@@ -21,7 +21,7 @@
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
   - `third_party/pikafish`: official Pikafish source as a git submodule
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
-  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, and summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV)
+  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV), and the current depth-20 / 2000ms browser AI defaults
   - `web/src/components/PhaserBoard.vue`: Phaser board wrapper with DOM piece/move overlays plus SVG path highlighting for the AI's latest move
   - `.github/workflows/ci.yml`: GitHub Actions CI for native tests plus WASM/frontend builds
   - `.github/workflows/pages.yml`: GitHub Pages build and deploy workflow
@@ -61,6 +61,7 @@
 - Board presentation is view-only and can flip automatically with the player's side so the human-controlled army stays on the near side while rules/FEN remain unchanged.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
+- Default browser AI tuning currently uses `max depth = 20` with a `2000ms` budget; future strength work should prefer making that budget more selective before pushing browser waits much higher.
 - Browser/native AI can short-circuit into the shared offline opening book for early red-side mainline moves before falling back to search.
 - Player-facing AI feedback should use summarized search reports from the WASM bridge (last move, eval, completed depth, visited nodes, elapsed time, PV) instead of streaming every explored node to the UI.
 - GitHub Pages deployment assumes the repository path base `/chinese-chess/`.

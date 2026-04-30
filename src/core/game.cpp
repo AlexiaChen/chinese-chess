@@ -458,6 +458,12 @@ bool GameState::generals_facing() const {
     return blocker_count(red_general, black_general) == 0;
 }
 
+GameState GameState::pass_turn() const {
+    GameState next = *this;
+    next.side_to_move_ = opposite(side_to_move_);
+    return next;
+}
+
 bool GameState::apply_move(const Move& move) {
     if (!is_legal_move(move)) {
         return false;

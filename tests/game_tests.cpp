@@ -216,6 +216,22 @@ void search_uses_opening_book_for_red_first_moves_test() {
            "Central cannon counter line should still develop the right horse");
 }
 
+void search_midgame_node_budget_test() {
+    const GameState game = GameState::from_fen(
+        "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
+    const auto report = chinese_chess::engine::search_best_move(
+        game,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 5,
+            .time_budget_ms = 0,
+        });
+
+    expect(report.best_move.has_value(), "Midgame search should still produce a move");
+    expect(report.completed_depth == 5, "Untimed midgame search should finish the requested depth");
+    expect(report.visited_nodes < 170000,
+           "Midgame search should stay under the node budget after pruning improvements");
+}
+
 void browser_session_bridge_test() {
     chinese_chess::bridge::BrowserSession session;
 
@@ -278,6 +294,7 @@ int main() {
     time_budgeted_search_returns_playable_move_test();
     search_report_exposes_metadata_test();
     search_uses_opening_book_for_red_first_moves_test();
+    search_midgame_node_budget_test();
     browser_session_bridge_test();
     return 0;
 }
