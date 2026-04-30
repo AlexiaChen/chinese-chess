@@ -101,3 +101,11 @@
 - **Evidence**: `web/src/App.vue:162`, `web/src/App.vue:241`, `web/src/workers/aiSearchWorker.ts:16`
 - **Confidence**: 8/10
 - **Action**: When adding async search here, ship Worker lifecycle cancellation first; add fine-grained search interrupts only after the message flow is stable.
+
+### L-013: [gotcha] Worker-side WASM builds must include `worker` in Emscripten ENVIRONMENT (2026-04-30)
+- **Issue**: #79 — 增加异步Worker搜索
+- **Trigger**: Emscripten, Web Worker, WASM runtime, ENVIRONMENT, browser AI, worker load failure
+- **Pattern**: A browser-facing WASM bundle can still fail inside a Worker if Emscripten is compiled with `-sENVIRONMENT=web` only. For this project, Worker-based AI search requires `-sENVIRONMENT=web,worker` so the runtime is valid in both contexts.
+- **Evidence**: `CMakeLists.txt:61`, reproduced through `web preview` + browser automation after `a3a4`
+- **Confidence**: 10/10
+- **Action**: Whenever adding Worker-hosted WASM features here, verify the Emscripten environment flags include `worker` and validate through an actual preview/browser run, not just builds.
