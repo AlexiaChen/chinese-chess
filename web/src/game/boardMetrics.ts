@@ -2,10 +2,10 @@ export const BOARD_METRICS = {
   width: 860,
   height: 980,
   paddingX: 96,
-  paddingTop: 98,
+  paddingTop: 121,
   cellX: 82,
-  cellY: 71,
-  riverGap: 59,
+  cellY: 82,
+  riverGap: 0,
   pieceRadius: 28,
 } as const
 

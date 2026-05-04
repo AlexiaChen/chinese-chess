@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
 import type { AiSearchWorkerRequest, AiSearchWorkerResponse } from './bridge/aiSearchWorkerProtocol'
-import type { AiMoveReport, BrowserBridge } from './bridge/wasmBridge'
+import type { AiMoveReport, BrowserBridge, PositionStatus } from './bridge/wasmBridge'
 import { createWasmBridge } from './bridge/wasmBridge'
 import PhaserBoard from './components/PhaserBoard.vue'
 import { INITIAL_FEN, parseFen, pieceDisplayName, sideLabel } from './game/fen'
@@ -18,9 +18,26 @@ const humanSide = ref<'w' | 'b'>('w')
 const lastAiReport = ref<AiMoveReport | null>(null)
 const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
+const battleNotification = ref<BattleNotification | null>(null)
 
 const AI_MAX_DEPTH = 20
 const AI_TIME_BUDGET_MS = 5000
+
+type AppliedMovePayload = {
+  move: string
+  fenBefore: string
+  fenAfter: string
+}
+
+type BattleNotificationTone = 'capture' | 'check' | 'mate'
+
+type BattleNotification = {
+  id: number
+  title: string
+  detail: string
+  tone: BattleNotificationTone
+  tags: string[]
+}
 
 type PendingAiSearch = {
   requestId: number
@@ -31,6 +48,8 @@ type PendingAiSearch = {
 let aiWorker: Worker | null = null
 let nextAiSearchRequestId = 0
 let pendingAiSearch: PendingAiSearch | null = null
+let nextBattleNotificationId = 0
+let battleNotificationTimer: number | null = null
 
 declare global {
   interface Window {
@@ -153,6 +172,26 @@ function clearAiThinkingProgress() {
   aiThinkingMove.value = null
 }
 
+function clearBattleNotification() {
+  if (battleNotificationTimer !== null) {
+    window.clearTimeout(battleNotificationTimer)
+    battleNotificationTimer = null
+  }
+  battleNotification.value = null
+}
+
+function showBattleNotification(notification: Omit<BattleNotification, 'id'>) {
+  clearBattleNotification()
+  battleNotification.value = {
+    id: ++nextBattleNotificationId,
+    ...notification,
+  }
+  battleNotificationTimer = window.setTimeout(() => {
+    battleNotification.value = null
+    battleNotificationTimer = null
+  }, 2200)
+}
+
 function syncFromBridge() {
   if (!bridge.value) {
     currentFen.value = INITIAL_FEN
@@ -177,6 +216,135 @@ function disposeAiWorker(resolvePendingWithNull = false) {
     aiWorker.terminate()
     aiWorker = null
   }
+}
+
+function squareToBoardIndex(square: string) {
+  const file = square.charCodeAt(0) - 'a'.charCodeAt(0)
+  const rank = 9 - Number(square[1])
+  return rank * 9 + file
+}
+
+function pieceAtSquare(fen: string, square: string) {
+  const position = parseFen(fen)
+  return position.board[squareToBoardIndex(square)]
+}
+
+function pieceSideLabel(piece: string) {
+  return piece === piece.toUpperCase() ? '红方' : '黑方'
+}
+
+function battleNotificationFrameClass(tone: BattleNotificationTone) {
+  switch (tone) {
+    case 'mate':
+      return 'border-rose-300/30 bg-[linear-gradient(135deg,rgba(125,24,37,0.9),rgba(43,8,16,0.94))] shadow-[0_18px_50px_rgba(81,12,25,0.35)]'
+    case 'check':
+      return 'border-amber-200/30 bg-[linear-gradient(135deg,rgba(138,52,23,0.9),rgba(51,22,10,0.94))] shadow-[0_18px_50px_rgba(112,45,16,0.35)]'
+    case 'capture':
+      return 'border-emerald-200/25 bg-[linear-gradient(135deg,rgba(46,78,64,0.9),rgba(14,24,22,0.94))] shadow-[0_18px_50px_rgba(10,30,24,0.35)]'
+  }
+}
+
+function battleNotificationTitleClass(tone: BattleNotificationTone) {
+  switch (tone) {
+    case 'mate':
+      return 'border border-rose-200/35 bg-rose-200/12 text-rose-50'
+    case 'check':
+      return 'border border-amber-200/35 bg-amber-200/12 text-amber-50'
+    case 'capture':
+      return 'border border-emerald-200/35 bg-emerald-200/12 text-emerald-50'
+  }
+}
+
+function battleNotificationTagClass(tone: BattleNotificationTone) {
+  switch (tone) {
+    case 'mate':
+      return 'border border-white/12 bg-white/10 text-rose-100/90'
+    case 'check':
+      return 'border border-white/12 bg-white/10 text-amber-100/90'
+    case 'capture':
+      return 'border border-white/12 bg-white/10 text-emerald-100/90'
+  }
+}
+
+function buildBattleNotification(
+  fenBeforeMove: string,
+  move: string,
+  status: PositionStatus,
+): Omit<BattleNotification, 'id'> | null {
+  const movingPiece = pieceAtSquare(fenBeforeMove, move.slice(0, 2))
+  const capturedPiece = pieceAtSquare(fenBeforeMove, move.slice(2, 4))
+  const captureDetail =
+    movingPiece && capturedPiece
+      ? `${pieceSideLabel(movingPiece)}${pieceDisplayName(movingPiece)}吃掉${pieceSideLabel(capturedPiece)}${pieceDisplayName(capturedPiece)}`
+      : ''
+  const captureTags = capturedPiece ? ['吃'] : []
+
+  if (!status.hasLegalMoves) {
+    return {
+      title: '绝杀',
+      detail: status.inCheck
+        ? `${sideLabel(status.sideToMove)}无路可逃${captureDetail ? `，${captureDetail}` : ''}`
+        : `${sideLabel(status.sideToMove)}已无合法着法${captureDetail ? `，${captureDetail}` : ''}`,
+      tone: 'mate',
+      tags: captureTags,
+    }
+  }
+
+  if (status.inCheck) {
+    return {
+      title: '将军',
+      detail: captureDetail ? `${captureDetail}，${sideLabel(status.sideToMove)}受将。` : `${sideLabel(status.sideToMove)}受将。`,
+      tone: 'check',
+      tags: captureTags,
+    }
+  }
+
+  if (captureDetail) {
+    return {
+      title: '吃',
+      detail: captureDetail,
+      tone: 'capture',
+      tags: [],
+    }
+  }
+
+  return null
+}
+
+function updateBridgeStatusFromPosition(status: PositionStatus) {
+  if (!status.hasLegalMoves) {
+    bridgeStatus.value = `${sideLabel(status.sideToMove)}已无合法着法，对局结束。`
+    return
+  }
+
+  if (status.inCheck) {
+    bridgeStatus.value = `${sideLabel(status.sideToMove)}被将军。`
+    return
+  }
+
+  refreshBridgeStatus()
+}
+
+function handleResolvedMove(fenBeforeMove: string, move: string) {
+  if (!bridge.value) {
+    return
+  }
+
+  const status = bridge.value.currentPositionStatus()
+  const notification = buildBattleNotification(fenBeforeMove, move, status)
+  if (notification) {
+    showBattleNotification(notification)
+  }
+  updateBridgeStatusFromPosition(status)
+}
+
+function handleBoardFenChange(fen: string) {
+  currentFen.value = fen
+}
+
+function handleHumanMoveApplied(payload: AppliedMovePayload) {
+  currentFen.value = payload.fenAfter
+  handleResolvedMove(payload.fenBefore, payload.move)
 }
 
 function ensureAiWorker() {
@@ -261,6 +429,12 @@ async function maybeRunAiTurn() {
     return
   }
 
+  const currentStatus = bridge.value.currentPositionStatus()
+  if (!currentStatus.hasLegalMoves) {
+    bridgeStatus.value = `${sideLabel(currentStatus.sideToMove)}已无合法着法，对局结束。`
+    return
+  }
+
   const fenBeforeAiMove = currentFen.value
   aiThinking.value = true
   clearAiThinkingProgress()
@@ -302,13 +476,14 @@ async function maybeRunAiTurn() {
   lastAiReport.value = aiReport
   lastAiMoveLabel.value = describeAiMove(fenBeforeAiMove, aiReport.move)
   syncFromBridge()
-  bridgeStatus.value = `AI 已落子 ${lastAiMoveLabel.value}`
+  handleResolvedMove(fenBeforeAiMove, aiReport.move)
 }
 
 function resetBoard() {
   cancelAiSearch()
   clearAiThinkingProgress()
   clearAiInsight()
+  clearBattleNotification()
   if (bridge.value) {
     bridge.value.reset()
   }
@@ -332,6 +507,7 @@ function undoBoard() {
   aiThinking.value = false
   clearAiThinkingProgress()
   clearAiInsight()
+  clearBattleNotification()
   syncFromBridge()
   resetKey.value += 1
   bridgeStatus.value = aiEnabled.value ? '已悔一回合，回到你做决定之前。' : '已悔最近一步。'
@@ -366,6 +542,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposeAiWorker(true)
+  clearBattleNotification()
 })
 
 watch([currentFen, aiEnabled, bridge, humanSide], () => {
@@ -373,13 +550,19 @@ watch([currentFen, aiEnabled, bridge, humanSide], () => {
     return
   }
 
+  const positionStatus = bridge.value.currentPositionStatus()
+
   if (aiEnabled.value && activeSideToken.value === aiSide.value && !aiThinking.value) {
+    if (!positionStatus.hasLegalMoves) {
+      bridgeStatus.value = `${sideLabel(positionStatus.sideToMove)}已无合法着法，对局结束。`
+      return
+    }
     void maybeRunAiTurn()
     return
   }
 
   if (!aiThinking.value) {
-    refreshBridgeStatus()
+    updateBridgeStatusFromPosition(positionStatus)
   }
 })
 
@@ -692,16 +875,52 @@ watchEffect(() => {
             </p>
           </header>
 
-            <PhaserBoard
-              :bridge="bridge"
-              :fen="currentFen"
-              :bottom-side="humanSide"
-              :highlight-move="aiThinking ? undefined : lastAiReport?.move || undefined"
-              :thinking-move="aiThinkingMove || undefined"
-              :interaction-locked="interactionLocked"
-              :reset-key="resetKey"
-              @fen-change="currentFen = $event"
-            />
+            <div class="relative">
+              <div
+                v-if="battleNotification"
+                :key="battleNotification.id"
+                class="pointer-events-none absolute inset-x-0 top-8 z-30 flex justify-center px-4"
+              >
+                <div
+                  class="w-full max-w-[560px] rounded-[28px] px-5 py-4 backdrop-blur-xl"
+                  :class="battleNotificationFrameClass(battleNotification.tone)"
+                >
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span
+                        class="rounded-full px-3 py-1 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-sm tracking-[0.18em]"
+                        :class="battleNotificationTitleClass(battleNotification.tone)"
+                      >
+                        {{ battleNotification.title }}
+                      </span>
+                      <span
+                        v-for="tag in battleNotification.tags"
+                        :key="tag"
+                        class="rounded-full px-2.5 py-1 text-xs tracking-[0.16em]"
+                        :class="battleNotificationTagClass(battleNotification.tone)"
+                      >
+                        {{ tag }}
+                      </span>
+                    </div>
+                    <p class="mt-3 break-words font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-lg leading-8 text-stone-50">
+                      {{ battleNotification.detail }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <PhaserBoard
+                :bridge="bridge"
+                :fen="currentFen"
+                :bottom-side="humanSide"
+                :highlight-move="aiThinking ? undefined : lastAiReport?.move || undefined"
+                :thinking-move="aiThinkingMove || undefined"
+                :interaction-locked="interactionLocked"
+                :reset-key="resetKey"
+                @fen-change="handleBoardFenChange"
+                @move-applied="handleHumanMoveApplied"
+              />
+            </div>
         </div>
       </main>
     </div>

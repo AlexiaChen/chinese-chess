@@ -30,6 +30,14 @@ AiMoveReport to_ai_move_report(const engine::SearchResult& search_result) {
     return report;
 }
 
+PositionStatus describe_position(const GameState& state) {
+    return PositionStatus {
+        .side_to_move = state.side_to_move(),
+        .in_check = state.is_in_check(state.side_to_move()),
+        .has_legal_moves = state.has_any_legal_moves(),
+    };
+}
+
 }  // namespace
 
 BrowserSession::BrowserSession() :
@@ -54,6 +62,10 @@ std::string BrowserSession::current_fen() const {
 
 Side BrowserSession::side_to_move() const {
     return state_.side_to_move();
+}
+
+PositionStatus BrowserSession::current_position_status() const {
+    return describe_position(state_);
 }
 
 std::vector<std::string> BrowserSession::legal_moves_from(std::string_view square) const {

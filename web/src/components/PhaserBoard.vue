@@ -11,6 +11,12 @@ import {
 import { createBoardGame, type BoardGameHandle } from '../game/boardScene'
 import { parseFen, pieceDisplayName, toUciSquare } from '../game/fen'
 
+type MoveAppliedPayload = {
+  move: string
+  fenBefore: string
+  fenAfter: string
+}
+
 const props = defineProps({
   bridge: {
     type: Object as () => BrowserBridge | null,
@@ -44,7 +50,7 @@ const props = defineProps({
 
 const emit = defineEmits<{
   (event: 'fen-change', fen: string): void
-  (event: 'move-applied', move: string): void
+  (event: 'move-applied', payload: MoveAppliedPayload): void
 }>()
 
 const container = ref<HTMLElement | null>(null)
@@ -258,9 +264,14 @@ function handleMoveClick(move: string) {
     return
   }
 
+  const fenBefore = props.fen
   const nextFen = props.bridge.currentFen()
   emit('fen-change', nextFen)
-  emit('move-applied', move)
+  emit('move-applied', {
+    move,
+    fenBefore,
+    fenAfter: nextFen,
+  })
   clearSelection(`已落子 ${move}`)
 }
 
@@ -274,7 +285,12 @@ onMounted(() => {
     fen: props.fen,
     bottomSide: props.bottomSide,
     onFenChange: (fen) => emit('fen-change', fen),
-    onMoveApplied: (move) => emit('move-applied', move),
+    onMoveApplied: (move) =>
+      emit('move-applied', {
+        move,
+        fenBefore: props.fen,
+        fenAfter: props.bridge?.currentFen() ?? props.fen,
+      }),
   })
 })
 

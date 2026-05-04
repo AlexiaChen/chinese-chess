@@ -121,6 +121,17 @@ void apply_move_switches_side_test() {
     expect(game.side_to_move() == Side::Black, "Side to move should switch after a move");
 }
 
+void legal_move_availability_and_checkmate_status_test() {
+    const GameState initial = GameState::initial();
+    expect(initial.has_any_legal_moves(), "Initial position should expose legal moves");
+
+    const GameState black_mated = GameState::from_fen(
+        "4k4/3R1R3/4R4/9/9/9/9/9/9/4K4 b - - 0 1");
+    expect(black_mated.is_in_check(Side::Black), "Constructed mating net should place black in check");
+    expect(!black_mated.has_any_legal_moves(),
+           "Constructed mating net should leave black without legal replies");
+}
+
 void uci_codec_round_trip_test() {
     expect(chinese_chess::engine::to_uci_square(Position {0, 9}) == "a0",
            "Bottom-left red square should encode to a0");
@@ -300,6 +311,10 @@ void browser_session_bridge_test() {
         "Browser session should expose the Pikafish-compatible initial FEN");
     expect(session.undo_count() == 0, "Fresh browser session should start with no undo history");
     expect(!session.undo_last_move(), "Fresh browser session should reject undo");
+    const auto initial_status = session.current_position_status();
+    expect(initial_status.side_to_move == Side::Red, "Fresh browser session should start on red's turn");
+    expect(!initial_status.in_check, "Initial browser session should not start in check");
+    expect(initial_status.has_legal_moves, "Initial browser session should have legal moves");
 
     const auto moves = session.legal_moves_from("a3");
     expect(std::find(moves.begin(), moves.end(), "a3a4") != moves.end(),
@@ -307,6 +322,9 @@ void browser_session_bridge_test() {
     expect(session.apply_move("a3a4"), "Browser session should accept a legal move");
     expect(session.side_to_move() == Side::Black, "Browser session should switch side after applying move");
     expect(session.undo_count() == 1, "Human move should add one undo snapshot");
+    const auto reply_status = session.current_position_status();
+    expect(reply_status.side_to_move == Side::Black, "Status report should follow the current side to move");
+    expect(reply_status.has_legal_moves, "Opening reply position should keep legal moves for black");
 
     const std::string ai_move = session.apply_ai_move(1);
     expect(!ai_move.empty(), "Browser session should be able to apply an AI move");
@@ -366,6 +384,7 @@ int main() {
     cannon_capture_rule_test();
     general_facing_rule_test();
     apply_move_switches_side_test();
+    legal_move_availability_and_checkmate_status_test();
     uci_codec_round_trip_test();
     pikafish_process_adapter_test();
     search_prefers_winning_capture_test();

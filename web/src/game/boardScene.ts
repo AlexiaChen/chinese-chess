@@ -20,8 +20,8 @@ class XiangqiBoardScene extends Phaser.Scene {
   onFenChange: (fen: string) => void
   onMoveApplied: (move: string) => void
   pieceLayer: Phaser.GameObjects.Container | null
-  leftRiverLabel: Phaser.GameObjects.Text | null
-  rightRiverLabel: Phaser.GameObjects.Text | null
+  leftRiverLabel: Phaser.GameObjects.Container | null
+  rightRiverLabel: Phaser.GameObjects.Container | null
 
   constructor(
     initialFen: string,
@@ -115,6 +115,7 @@ class XiangqiBoardScene extends Phaser.Scene {
 
     this.drawPalace(graphics, 0)
     this.drawPalace(graphics, 7)
+    this.drawPositionMarkers(graphics)
   }
 
   drawPalace(graphics: Phaser.GameObjects.Graphics, startRank: number): void {
@@ -132,40 +133,104 @@ class XiangqiBoardScene extends Phaser.Scene {
   }
 
   drawRiverLabel(): void {
-    const midY = (pointFor(0, 4).y + pointFor(0, 5).y) / 2
-
-    this.leftRiverLabel = this.add
-      .text(BOARD_METRICS.width * 0.27, midY, '', {
-        fontFamily: '"Kaiti SC", "STKaiti", "KaiTi", serif',
-        fontSize: '38px',
-        color: '#6f4b2c',
-      })
-      .setOrigin(0.5)
-    this.rightRiverLabel = this.add
-      .text(BOARD_METRICS.width * 0.73, midY, '', {
-        fontFamily: '"Kaiti SC", "STKaiti", "KaiTi", serif',
-        fontSize: '38px',
-        color: '#6f4b2c',
-      })
-      .setOrigin(0.5)
-
     this.updateRiverLabel()
   }
 
   updateRiverLabel(): void {
-    if (!this.leftRiverLabel || !this.rightRiverLabel) {
-      return
-    }
+    this.leftRiverLabel?.destroy(true)
+    this.rightRiverLabel?.destroy(true)
 
+    const midY = (pointFor(0, 4).y + pointFor(0, 5).y) / 2
     const leftText = this.bottomSide === 'w' ? '楚河' : '汉界'
     const rightText = this.bottomSide === 'w' ? '汉界' : '楚河'
     const leftRotation = this.bottomSide === 'w' ? -0.02 : 0.02
     const rightRotation = this.bottomSide === 'w' ? 0.02 : -0.02
 
-    this.leftRiverLabel.setText(leftText)
-    this.leftRiverLabel.setRotation(leftRotation)
-    this.rightRiverLabel.setText(rightText)
-    this.rightRiverLabel.setRotation(rightRotation)
+    this.leftRiverLabel = this.createRiverColumn(
+      (pointFor(1, 4).x + pointFor(2, 4).x) / 2,
+      midY,
+      leftText,
+      leftRotation,
+    )
+    this.rightRiverLabel = this.createRiverColumn(
+      (pointFor(6, 4).x + pointFor(7, 4).x) / 2,
+      midY,
+      rightText,
+      rightRotation,
+    )
+  }
+
+  createRiverColumn(
+    x: number,
+    y: number,
+    text: string,
+    rotation: number,
+  ): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y)
+    const characters = Array.from(text)
+    const sealWidth = BOARD_METRICS.cellX * 0.82
+    const sealHeight = BOARD_METRICS.cellY * 0.82
+    const charGap = sealWidth * 0.44
+    const fontSize = `${Math.floor(Math.min(sealWidth, sealHeight) * 0.5)}px`
+
+    characters.forEach((char, index) => {
+      const offsetX = (index - (characters.length - 1) / 2) * charGap
+      const glyph = this.add
+        .text(offsetX, 0, char, {
+          fontFamily: '"Kaiti SC", "STKaiti", "KaiTi", serif',
+          fontSize,
+          color: '#6f4b2c',
+        })
+        .setOrigin(0.5)
+        .setAlpha(0.92)
+      container.add(glyph)
+    })
+
+    container.setSize(sealWidth, sealHeight)
+    container.setRotation(rotation)
+    return container
+  }
+
+  drawPositionMarkers(graphics: Phaser.GameObjects.Graphics): void {
+    const markerPoints = [
+      { file: 1, rank: 2 },
+      { file: 7, rank: 2 },
+      { file: 0, rank: 3 },
+      { file: 2, rank: 3 },
+      { file: 4, rank: 3 },
+      { file: 6, rank: 3 },
+      { file: 8, rank: 3 },
+      { file: 0, rank: 6 },
+      { file: 2, rank: 6 },
+      { file: 4, rank: 6 },
+      { file: 6, rank: 6 },
+      { file: 8, rank: 6 },
+      { file: 1, rank: 7 },
+      { file: 7, rank: 7 },
+    ]
+
+    markerPoints.forEach(({ file, rank }) => this.drawPositionMarker(graphics, file, rank))
+  }
+
+  drawPositionMarker(graphics: Phaser.GameObjects.Graphics, file: number, rank: number): void {
+    const { x, y } = pointFor(file, rank)
+    const markerOffset = 12
+    const markerLength = 12
+    const horizontalDirections =
+      file === 0 ? [1] : file === 8 ? [-1] : [-1, 1]
+
+    horizontalDirections.forEach((horizontal) => {
+      ;[-1, 1].forEach((vertical) => {
+        const cornerX = x + horizontal * markerOffset
+        const cornerY = y + vertical * markerOffset
+        graphics.beginPath()
+        graphics.moveTo(cornerX, cornerY)
+        graphics.lineTo(cornerX + horizontal * markerLength, cornerY)
+        graphics.moveTo(cornerX, cornerY)
+        graphics.lineTo(cornerX, cornerY + vertical * markerLength)
+        graphics.strokePath()
+      })
+    })
   }
 
   renderPieces(): void {

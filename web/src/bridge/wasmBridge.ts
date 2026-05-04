@@ -16,9 +16,16 @@ export interface SearchProgress {
   visitedNodes: number
 }
 
+export interface PositionStatus {
+  sideToMove: 'w' | 'b'
+  inCheck: boolean
+  hasLegalMoves: boolean
+}
+
 export interface BrowserBridge {
   currentFen: () => string
   legalMovesFrom: (square: string) => string[]
+  currentPositionStatus: () => PositionStatus
   applyMove: (move: string) => boolean
   undoLastMove: () => boolean
   undoCount: () => number
@@ -81,6 +88,11 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
     'string',
     ['string'],
   )
+  const currentPositionStatus = runtime.cwrap<() => string>(
+    'chinese_chess_current_position_status',
+    'string',
+    [],
+  )
   const applyMove = runtime.cwrap<(move: string) => number>('chinese_chess_apply_move', 'number', [
     'string',
   ])
@@ -117,6 +129,9 @@ export async function createWasmBridge(): Promise<BrowserBridge> {
     currentFen,
     legalMovesFrom(square: string) {
       return JSON.parse(legalMovesFrom(square)) as string[]
+    },
+    currentPositionStatus() {
+      return JSON.parse(currentPositionStatus()) as PositionStatus
     },
     applyMove(move: string) {
       return applyMove(move) === 1

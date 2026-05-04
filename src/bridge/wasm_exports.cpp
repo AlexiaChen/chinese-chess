@@ -34,6 +34,10 @@ std::string to_json_bool(bool value) {
     return value ? "true" : "false";
 }
 
+std::string to_json_side(chinese_chess::Side side) {
+    return side == chinese_chess::Side::Black ? "\"b\"" : "\"w\"";
+}
+
 std::string to_json(const AiMoveReport& report) {
     std::string json = "{";
     json += "\"move\":\"" + report.move + "\",";
@@ -43,6 +47,15 @@ std::string to_json(const AiMoveReport& report) {
     json += "\"elapsedMs\":" + std::to_string(report.elapsed_ms) + ",";
     json += "\"principalVariation\":" + to_json_array(report.principal_variation) + ",";
     json += "\"timedOut\":" + to_json_bool(report.timed_out);
+    json += "}";
+    return json;
+}
+
+std::string to_json(const PositionStatus& status) {
+    std::string json = "{";
+    json += "\"sideToMove\":" + to_json_side(status.side_to_move) + ",";
+    json += "\"inCheck\":" + to_json_bool(status.in_check) + ",";
+    json += "\"hasLegalMoves\":" + to_json_bool(status.has_legal_moves);
     json += "}";
     return json;
 }
@@ -62,6 +75,13 @@ const char* chinese_chess_legal_moves_from(const char* square) {
     auto& buffer = chinese_chess::bridge::shared_buffer();
     buffer = chinese_chess::bridge::to_json_array(
         chinese_chess::bridge::session().legal_moves_from(square));
+    return buffer.c_str();
+}
+
+const char* chinese_chess_current_position_status() {
+    auto& buffer = chinese_chess::bridge::shared_buffer();
+    buffer = chinese_chess::bridge::to_json(
+        chinese_chess::bridge::session().current_position_status());
     return buffer.c_str();
 }
 

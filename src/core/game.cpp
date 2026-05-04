@@ -439,6 +439,24 @@ std::vector<Move> GameState::generate_legal_moves(Position from) const {
     return legal;
 }
 
+bool GameState::has_any_legal_moves() const {
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position from {file, rank};
+            const Piece piece = piece_at(from);
+            if (piece.is_empty() || piece.side != side_to_move_) {
+                continue;
+            }
+
+            if (!generate_legal_moves(from).empty()) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 bool GameState::is_legal_move(const Move& move) const {
     const std::vector<Move> legal_moves = generate_legal_moves(move.from);
     return std::ranges::find(legal_moves, move) != legal_moves.end();

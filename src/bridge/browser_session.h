@@ -20,6 +20,12 @@ struct AiMoveReport {
     bool timed_out {false};
 };
 
+struct PositionStatus {
+    Side side_to_move {Side::Red};
+    bool in_check {false};
+    bool has_legal_moves {true};
+};
+
 class BrowserSession {
 public:
     BrowserSession();
@@ -31,6 +37,7 @@ public:
 
     [[nodiscard]] std::string current_fen() const;
     [[nodiscard]] Side side_to_move() const;
+    [[nodiscard]] PositionStatus current_position_status() const;
     [[nodiscard]] std::vector<std::string> legal_moves_from(std::string_view square) const;
 
     bool apply_move(std::string_view move);

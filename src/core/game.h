@@ -67,6 +67,7 @@ public:
 
     [[nodiscard]] std::vector<Move> generate_pseudo_legal_moves(Position from) const;
     [[nodiscard]] std::vector<Move> generate_legal_moves(Position from) const;
+    [[nodiscard]] bool has_any_legal_moves() const;
     [[nodiscard]] bool is_legal_move(const Move& move) const;
     [[nodiscard]] bool is_in_check(Side side) const;
     [[nodiscard]] bool generals_facing() const;
