@@ -54,7 +54,9 @@ constexpr int kInfinityScore = 2'000'000;
 constexpr int kHistoryTableSize = kBoardSquares * kBoardSquares;
 constexpr int kMaxPly = 64;
 constexpr std::size_t kTranspositionTableSize = 1U << 16;
-constexpr int kInitialAspirationWindow = 48;
+constexpr int kInitialAspirationWindow = 96;
+constexpr int kMaxPhaseUnits = 44;
+constexpr int kDeltaPruningMargin = 120;
 
 enum class BoundType {
     Exact,
@@ -145,6 +147,38 @@ int piece_value(PieceType type) {
     }
 
     return 0;
+}
+
+int phase_unit(PieceType type) {
+    switch (type) {
+    case PieceType::Rook:
+        return 6;
+    case PieceType::Horse:
+        return 4;
+    case PieceType::Cannon:
+        return 4;
+    case PieceType::Advisor:
+    case PieceType::Elephant:
+        return 1;
+    case PieceType::General:
+    case PieceType::Soldier:
+    case PieceType::None:
+        return 0;
+    }
+
+    return 0;
+}
+
+bool in_palace(Position position, Side side) {
+    const bool file_ok = position.file >= 3 && position.file <= 5;
+    const bool rank_ok = side == Side::Red
+        ? position.rank >= 7 && position.rank <= 9
+        : position.rank >= 0 && position.rank <= 2;
+    return file_ok && rank_ok;
+}
+
+bool crossed_river(Position position, Side side) {
+    return side == Side::Red ? position.rank <= 4 : position.rank >= 5;
 }
 
 int positional_bonus(Piece piece, Position position) {
@@ -315,13 +349,257 @@ int line_pressure_bonus(const GameState& state, Side side) {
             const int blockers = blockers_between(state, position, enemy_general);
             if (piece.type == PieceType::Rook) {
                 if (blockers == 1) {
-                    bonus += 40;
+                    bonus += 52;
                 } else if (blockers == 0) {
-                    bonus += 12;
+                    bonus += 56;
                 }
             } else if (piece.type == PieceType::Cannon && blockers == 2) {
-                bonus += 18;
+                bonus += 22;
             }
+        }
+    }
+
+    return bonus;
+}
+
+int orthogonal_open_steps(const GameState& state, Position from) {
+    int steps = 0;
+    for (const Position direction : {
+             Position {1, 0},
+             Position {-1, 0},
+             Position {0, 1},
+             Position {0, -1},
+         }) {
+        for (Position to {from.file + direction.file, from.rank + direction.rank};
+             to.is_valid();
+             to = Position {to.file + direction.file, to.rank + direction.rank}) {
+            if (!state.piece_at(to).is_empty()) {
+                break;
+            }
+            ++steps;
+        }
+    }
+    return steps;
+}
+
+int game_phase_units(const GameState& state) {
+    int phase = 0;
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Piece piece = state.piece_at(Position {file, rank});
+            if (piece.is_empty()) {
+                continue;
+            }
+            phase += phase_unit(piece.type);
+        }
+    }
+
+    return phase;
+}
+
+int middlegame_weight(const GameState& state) {
+    return 64 + game_phase_units(state) * 64 / kMaxPhaseUnits;
+}
+
+int endgame_weight(const GameState& state) {
+    return 64 + (kMaxPhaseUnits - game_phase_units(state)) * 64 / kMaxPhaseUnits;
+}
+
+int palace_guard_bonus(const GameState& state, Side side) {
+    const Position general = find_general_position(state, side);
+    int bonus = general.file == 4 ? 12 : 0;
+    bonus += side == Side::Red ? (general.rank == 9 ? 8 : 0) : (general.rank == 0 ? 8 : 0);
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position position {file, rank};
+            const Piece piece = state.piece_at(position);
+            if (piece.is_empty() || piece.side != side) {
+                continue;
+            }
+
+            switch (piece.type) {
+            case PieceType::Advisor:
+                bonus += 18;
+                if (in_palace(position, side)
+                    && std::abs(position.file - general.file) <= 1
+                    && std::abs(position.rank - general.rank) <= 1) {
+                    bonus += 8;
+                }
+                break;
+            case PieceType::Elephant:
+                bonus += crossed_river(position, side) ? 0 : 20;
+                break;
+            case PieceType::Soldier:
+                if (!crossed_river(position, side) && std::abs(position.file - 4) <= 1) {
+                    bonus += 4;
+                }
+                break;
+            case PieceType::General:
+            case PieceType::Horse:
+            case PieceType::Rook:
+            case PieceType::Cannon:
+            case PieceType::None:
+                break;
+            }
+        }
+    }
+
+    return bonus;
+}
+
+int palace_pressure_bonus(const GameState& state, Side side) {
+    const Side enemy = opposite(side);
+    const Position enemy_general = find_general_position(state, enemy);
+    const GameState pressure_state = state.side_to_move() == side ? state : state.pass_turn();
+    int bonus = 0;
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position from {file, rank};
+            const Piece piece = pressure_state.piece_at(from);
+            if (piece.is_empty() || piece.side != side) {
+                continue;
+            }
+            if (piece.type != PieceType::Rook
+                && piece.type != PieceType::Cannon
+                && piece.type != PieceType::Horse
+                && piece.type != PieceType::Soldier) {
+                continue;
+            }
+
+            if (std::abs(from.file - enemy_general.file) <= 1
+                && std::abs(from.rank - enemy_general.rank) <= 2) {
+                bonus += piece.type == PieceType::Rook ? 34 : piece.type == PieceType::Horse ? 28 : 20;
+            }
+
+            const std::vector<Move> moves = pressure_state.generate_pseudo_legal_moves(from);
+            for (const Move& move : moves) {
+                if (in_palace(move.to, enemy)) {
+                    switch (piece.type) {
+                    case PieceType::Rook:
+                        bonus += 8;
+                        break;
+                    case PieceType::Horse:
+                        bonus += 14;
+                        break;
+                    case PieceType::Cannon:
+                        bonus += 6;
+                        break;
+                    case PieceType::Soldier:
+                        bonus += 6;
+                        break;
+                    case PieceType::General:
+                    case PieceType::Advisor:
+                    case PieceType::Elephant:
+                    case PieceType::None:
+                        break;
+                    }
+                }
+                if (std::abs(move.to.file - enemy_general.file) <= 1
+                    && std::abs(move.to.rank - enemy_general.rank) <= 1) {
+                    bonus += piece.type == PieceType::Horse ? 12 : 4;
+                }
+            }
+        }
+    }
+
+    return bonus;
+}
+
+int horse_cannon_activity_bonus(const GameState& state, Side side) {
+    const Side enemy = opposite(side);
+    const Position enemy_general = find_general_position(state, enemy);
+    const GameState activity_state = state.side_to_move() == side ? state : state.pass_turn();
+    int bonus = 0;
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position from {file, rank};
+            const Piece piece = activity_state.piece_at(from);
+            if (piece.is_empty() || piece.side != side) {
+                continue;
+            }
+            if (piece.type != PieceType::Horse && piece.type != PieceType::Cannon) {
+                continue;
+            }
+
+            const std::vector<Move> moves = activity_state.generate_pseudo_legal_moves(from);
+            const int center_distance = std::abs(from.file - 4) + std::abs(from.rank - 4);
+            if (piece.type == PieceType::Horse) {
+                bonus += static_cast<int>(moves.size()) * 5;
+                bonus += std::max(0, 16 - center_distance * 3);
+                if (std::abs(from.file - enemy_general.file) <= 1
+                    && std::abs(from.rank - enemy_general.rank) <= 3) {
+                    bonus += 10;
+                }
+            } else {
+                int adjacent_blockers = 0;
+                for (const Position direction : {
+                         Position {1, 0},
+                         Position {-1, 0},
+                         Position {0, 1},
+                         Position {0, -1},
+                     }) {
+                    const Position adjacent {from.file + direction.file, from.rank + direction.rank};
+                    if (adjacent.is_valid() && !activity_state.piece_at(adjacent).is_empty()) {
+                        ++adjacent_blockers;
+                    }
+                }
+
+                bonus += orthogonal_open_steps(activity_state, from) * 9;
+                bonus -= adjacent_blockers * 20;
+                bonus += std::max(0, 12 - center_distance * 2);
+                if (from.file == enemy_general.file) {
+                    bonus += 10;
+                }
+            }
+        }
+    }
+
+    return bonus;
+}
+
+int soldier_structure_bonus(const GameState& state, Side side) {
+    const Side enemy = opposite(side);
+    const Position enemy_general = find_general_position(state, enemy);
+    std::vector<Position> soldiers;
+    soldiers.reserve(5);
+
+    for (int rank = 0; rank < kBoardRanks; ++rank) {
+        for (int file = 0; file < kBoardFiles; ++file) {
+            const Position position {file, rank};
+            const Piece piece = state.piece_at(position);
+            if (piece.type == PieceType::Soldier && piece.side == side) {
+                soldiers.push_back(position);
+            }
+        }
+    }
+
+    int bonus = 0;
+    for (const Position soldier : soldiers) {
+        const bool advanced = crossed_river(soldier, side);
+        bonus += advanced ? 18 : 6;
+        if (advanced && std::abs(soldier.file - enemy_general.file) <= 1) {
+            bonus += 8;
+        }
+
+        const bool connected = std::any_of(soldiers.begin(), soldiers.end(), [&](const Position other) {
+            return other != soldier
+                && other.rank == soldier.rank
+                && std::abs(other.file - soldier.file) == 1;
+        });
+        if (connected) {
+            bonus += 18;
+        }
+
+        const Position support_left {soldier.file - 1, soldier.rank + (side == Side::Red ? 1 : -1)};
+        const Position support_right {soldier.file + 1, soldier.rank + (side == Side::Red ? 1 : -1)};
+        const bool supported = std::ranges::find(soldiers, support_left) != soldiers.end()
+            || std::ranges::find(soldiers, support_right) != soldiers.end();
+        if (supported) {
+            bonus += 10;
         }
     }
 
@@ -345,6 +623,8 @@ void check_timeout(SearchContext& context) {
 
 int evaluate_red_perspective(const GameState& state) {
     int score = 0;
+    const int middlegame = middlegame_weight(state);
+    const int endgame = endgame_weight(state);
 
     for (int rank = 0; rank < kBoardRanks; ++rank) {
         for (int file = 0; file < kBoardFiles; ++file) {
@@ -368,6 +648,12 @@ int evaluate_red_perspective(const GameState& state) {
 
     score += line_pressure_bonus(state, Side::Red);
     score -= line_pressure_bonus(state, Side::Black);
+    score += (palace_guard_bonus(state, Side::Red) - palace_guard_bonus(state, Side::Black)) * middlegame / 128;
+    score += (palace_pressure_bonus(state, Side::Red) - palace_pressure_bonus(state, Side::Black)) * middlegame / 128;
+    score += (horse_cannon_activity_bonus(state, Side::Red) - horse_cannon_activity_bonus(state, Side::Black))
+        * middlegame / 128;
+    score += (soldier_structure_bonus(state, Side::Red) - soldier_structure_bonus(state, Side::Black))
+        * endgame / 52;
 
     return score;
 }
@@ -399,7 +685,23 @@ std::vector<Move> generate_all_legal_moves(const GameState& state) {
 int move_order_score(const GameState& state, const Move& move) {
     const Piece moving_piece = state.piece_at(move.from);
     const Piece captured_piece = state.piece_at(move.to);
-    return piece_value(captured_piece.type) * 16 - piece_value(moving_piece.type);
+    int score = piece_value(captured_piece.type) * 16 - piece_value(moving_piece.type);
+    score += positional_bonus(moving_piece, move.to) - positional_bonus(moving_piece, move.from);
+
+    if (!moving_piece.is_empty()) {
+        const Position enemy_general = find_general_position(state, opposite(moving_piece.side));
+        if (move.to.file == enemy_general.file) {
+            score += 12;
+        }
+        if (in_palace(move.to, opposite(moving_piece.side))) {
+            score += 8;
+        }
+        if (moving_piece.type == PieceType::Soldier && crossed_river(move.to, moving_piece.side)) {
+            score += 10;
+        }
+    }
+
+    return score;
 }
 
 const TranspositionEntry* probe_entry(const SearchContext& context, std::uint64_t key) {
@@ -636,6 +938,13 @@ int quiescence(const GameState& state, SearchContext& context, int alpha, int be
 
     order_moves(state, context, moves, ply);
     for (const Move& move : moves) {
+        const Piece captured_piece = state.piece_at(move.to);
+        if (!state.is_in_check(state.side_to_move())
+            && !captured_piece.is_empty()
+            && stand_pat + piece_value(captured_piece.type) + kDeltaPruningMargin < alpha) {
+            continue;
+        }
+
         GameState next = state;
         if (!next.apply_move(move)) {
             continue;

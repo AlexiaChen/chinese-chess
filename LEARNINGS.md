@@ -149,3 +149,11 @@
 - **Evidence**: `web/src/game/boardMetrics.ts:1`, `web/src/game/boardScene.ts:163`
 - **Confidence**: 9/10
 - **Action**: When future board-geometry feedback says `楚河/汉界 too wide`, inspect river-band metrics before touching label typography.
+
+### L-019: [gotcha] Xiangqi strength tuning here should expand evaluator terms under regression and node-budget guardrails (2026-05-04)
+- **Issue**: #83 — 优化棋力
+- **Trigger**: search tuning, evaluation, king safety, horse cannon activity, pawn structure, regression
+- **Pattern**: In this project, handcrafted evaluator work stayed safe only when new `evaluate_position()` assertions and the existing midgame node-budget regression were updated together. Quality-only tuning was not enough; some weight changes improved heuristics but silently pushed search cost up until quiescence pruning or rebalancing pulled the node budget back into line.
+- **Evidence**: `tests/game_tests.cpp:306`, `tests/game_tests.cpp:317`, `tests/game_tests.cpp:334`, `src/engine/search.cpp:59`, `src/engine/search.cpp:944`
+- **Confidence**: 9/10
+- **Action**: For future engine tuning here, add the evaluator/search regression first, then land the heuristic, and re-check the node budget before calling the work complete.

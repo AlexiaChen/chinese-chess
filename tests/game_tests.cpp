@@ -303,6 +303,49 @@ void feature_based_evaluation_rewards_general_file_pressure_test() {
            "Feature-based evaluation should reward rook pressure on the enemy general file");
 }
 
+void feature_based_evaluation_rewards_palace_pressure_test() {
+    const GameState active_attack = GameState::from_fen("4k4/3H1R3/4C4/9/9/9/9/9/9/4K4 w - - 0 1");
+    const GameState retreated_attack = GameState::from_fen("4k4/9/9/3H5/4C4/4R4/9/9/9/4K4 w - - 0 1");
+
+    const int active_score = chinese_chess::engine::evaluate_position(active_attack);
+    const int retreated_score = chinese_chess::engine::evaluate_position(retreated_attack);
+
+    expect(active_score >= retreated_score + 24,
+           "Feature-based evaluation should reward pressure concentrated near the enemy palace");
+}
+
+void feature_based_evaluation_rewards_horse_and_cannon_activity_test() {
+    const GameState active_horse = GameState::from_fen("4k4/9/9/p8/4N4/8p/9/9/9/4K4 w - - 0 1");
+    const GameState blocked_horse = GameState::from_fen("4k4/9/9/4p4/4N4/4p4/9/9/9/4K4 w - - 0 1");
+    const GameState active_cannon = GameState::from_fen("4k4/9/9/p8/4C4/8p/9/9/9/4K4 w - - 0 1");
+    const GameState blocked_cannon = GameState::from_fen("4k4/9/9/4p4/4C4/4p4/9/9/9/4K4 w - - 0 1");
+
+    const int horse_delta = chinese_chess::engine::evaluate_position(active_horse)
+        - chinese_chess::engine::evaluate_position(blocked_horse);
+    const int cannon_delta = chinese_chess::engine::evaluate_position(active_cannon)
+        - chinese_chess::engine::evaluate_position(blocked_cannon);
+
+    expect(horse_delta >= 16,
+           "Feature-based evaluation should reward horses with freer legs and more activity");
+    expect(cannon_delta >= 16,
+           "Feature-based evaluation should reward cannons with freer lines and more activity");
+}
+
+void feature_based_evaluation_scales_connected_soldiers_for_endgames_test() {
+    const GameState connected_endgame = GameState::from_fen("4k4/9/9/9/3P1P3/9/9/9/9/4K4 w - - 0 1");
+    const GameState split_endgame = GameState::from_fen("4k4/9/9/9/2P3P2/9/9/9/9/4K4 w - - 0 1");
+    const GameState connected_middlegame = GameState::from_fen("r3k3r/9/9/9/3P1P3/9/9/9/9/R3K3R w - - 0 1");
+    const GameState split_middlegame = GameState::from_fen("r3k3r/9/9/9/2P3P2/9/9/9/9/R3K3R w - - 0 1");
+
+    const int endgame_delta = chinese_chess::engine::evaluate_position(connected_endgame)
+        - chinese_chess::engine::evaluate_position(split_endgame);
+    const int middlegame_delta = chinese_chess::engine::evaluate_position(connected_middlegame)
+        - chinese_chess::engine::evaluate_position(split_middlegame);
+
+    expect(endgame_delta >= middlegame_delta + 10,
+           "Feature-based evaluation should amplify connected-soldier value more strongly in lighter endgames");
+}
+
 void browser_session_bridge_test() {
     chinese_chess::bridge::BrowserSession session;
 
@@ -394,6 +437,9 @@ int main() {
     search_uses_opening_book_for_red_first_moves_test();
     search_midgame_node_budget_test();
     feature_based_evaluation_rewards_general_file_pressure_test();
+    feature_based_evaluation_rewards_palace_pressure_test();
+    feature_based_evaluation_rewards_horse_and_cannon_activity_test();
+    feature_based_evaluation_scales_connected_soldiers_for_endgames_test();
     browser_session_bridge_test();
     browser_session_fen_search_does_not_mutate_live_state_test();
     return 0;

@@ -12,12 +12,12 @@
   - `src/core/game.h/.cpp`: board state, FEN parsing, legal move generation, move application, and check detection
   - `src/engine/opening_book.h/.cpp`: offline opening-book lines for early-game AI move selection before full search
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
-- `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, aspiration windows, root PVS, null-move pruning, move ordering, transposition caching, quiescence search, a feature-based evaluator (including public `evaluate_position()` and Xiangqi line-pressure scoring), plus shallow AI-side search progress callbacks for native/WASM gameplay
+- `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, aspiration windows, root PVS, null-move pruning, move ordering, transposition caching, quiescence search with delta pruning, a phase-aware feature-based evaluator (including public `evaluate_position()` and Xiangqi king-safety / palace-pressure / horse-cannon-activity / soldier-structure scoring), plus shallow AI-side search progress callbacks for native/WASM gameplay
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
 - `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine, including move history for browser-side undo, current-position status reporting (check / legal-move availability), plus side-effect-free AI search from an arbitrary FEN snapshot
 - `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `current_position_status`, `apply_move`, `undo_last_move`, `undo_count`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `search_ai_move_for_fen_with_report`, `reset`)
   - `src/apps/cli/main.cpp`: native CLI target that can print the board or query a configured engine command for `bestmove`
-  - `tests/game_tests.cpp`: rules and codec coverage
+- `tests/game_tests.cpp`: rules, codec, evaluator regression, and node-budget coverage
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
   - `third_party/pikafish`: official Pikafish source as a git submodule
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
@@ -66,10 +66,11 @@
 - Keep the river band aligned with normal cell spacing; if `楚河 / 汉界` looks too large, inspect board geometry before shrinking the label glyphs.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
-- Default browser AI tuning currently uses `max depth = 20` with a `2000ms` budget; future strength work should prefer making that budget more selective before pushing browser waits much higher.
+- Default browser AI tuning currently uses `max depth = 20` with a `5000ms` budget; future strength work should prefer making that budget more selective before pushing browser waits much higher.
 - The Vue shell owns the live BrowserSession state; Worker-based AI searches must operate on FEN snapshots and return moves/reports that the main thread applies to the authoritative session.
 - Worker-based browser AI can also stream search-progress focus squares from the shared WASM searcher; the main thread should treat those as transient UI hints and clear them on cancel, undo, reset, or result application.
 - Browser/native AI can short-circuit into the shared offline opening book for early red-side mainline moves before falling back to search.
 - The current evaluator stays in the handcrafted / feature-based family; when extending it, prefer Xiangqi-specific pressure/activity signals that keep the shared WASM core lightweight before attempting NNUE-scale complexity.
+- Strength tuning should add direct evaluator regressions and preserve the midgame node-budget guardrail in the same change, so heuristic gains do not silently bloat search cost.
 - Player-facing AI feedback should use summarized search reports from the WASM bridge (last move, eval, completed depth, visited nodes, elapsed time, PV) instead of streaming every explored node to the UI.
 - GitHub Pages deployment assumes the repository path base `/chinese-chess/`.
