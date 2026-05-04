@@ -21,7 +21,8 @@ const undoCount = ref(0)
 const battleNotification = ref<BattleNotification | null>(null)
 
 const AI_MAX_DEPTH = 20
-const AI_TIME_BUDGET_MS = 5000
+const AI_TIME_BUDGET_MS = 15000
+const AI_TIME_BUDGET_SECONDS = AI_TIME_BUDGET_MS / 1000
 
 type AppliedMovePayload = {
   move: string
@@ -141,7 +142,7 @@ function refreshBridgeStatus() {
   }
 
   if (aiThinking.value) {
-    bridgeStatus.value = `AI 正在思考（深度 ${AI_MAX_DEPTH}）…`
+    bridgeStatus.value = `AI 正在思考（深度上限 ${AI_MAX_DEPTH}，最长 ${AI_TIME_BUDGET_SECONDS} 秒）…`
     return
   }
 
@@ -751,7 +752,7 @@ watchEffect(() => {
                   局面控制
                 </span>
                 <span class="font-mono text-xs text-stone-400/70">
-                  {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH}` : 'AI 已关闭' }}
+                  {{ aiEnabled ? `AI 深度上限 ${AI_MAX_DEPTH} / 最长 ${AI_TIME_BUDGET_SECONDS} 秒` : 'AI 已关闭' }}
                 </span>
               </div>
               <div class="mt-3 grid gap-3 sm:grid-cols-3">

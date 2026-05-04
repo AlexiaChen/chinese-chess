@@ -23,7 +23,7 @@
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
   - `third_party/pikafish`: official Pikafish source as a git submodule
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
-  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV), short-lived battle notifications for capture/check/mate, live AI-thinking square state, and the current depth-20 / 5000ms browser AI defaults
+  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV), short-lived battle notifications for capture/check/mate, live AI-thinking square state, and the current depth-20 / 15000ms browser AI defaults
   - `web/src/workers/aiSearchWorker.ts`: dedicated Web Worker that loads the shared search WASM bridge, searches from FEN snapshots off the main thread, and streams summarized progress back to Vue
   - `web/src/components/PhaserBoard.vue`: Phaser board wrapper with DOM piece/move overlays, a green AI-thinking square overlay, SVG path highlighting for the AI's latest move, and structured move-applied events carrying pre/post-move FEN for the Vue shell
   - `web/src/game/boardScene.ts`: Phaser scene that draws the square-cell Xiangqi board, a normal-width river band with horizontal `楚河 / 汉界` labels, traditional soldier/cannon position markers, and the rendered pieces
@@ -69,7 +69,7 @@
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - Full Pikafish `Engine` search must not be compiled into the browser runtime; the viable browser path is the shared single-threaded searcher plus the adapted Pikafish NNUE evaluation code.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
-- Default browser AI tuning currently uses `max depth = 20` with a `5000ms` budget; future strength work should prefer making that budget more selective before pushing browser waits much higher.
+- Default browser AI tuning currently uses `max depth = 20` with a `15000ms` budget after profiling showed the NNUE path was only reaching roughly depth 3-4 in 5 seconds on representative middlegame positions; future strength work should still prefer search/selectivity improvements over pushing browser waits much higher.
 - The Vue shell owns the live BrowserSession state; Worker-based AI searches must operate on FEN snapshots and return moves/reports that the main thread applies to the authoritative session.
 - Worker-based browser AI can also stream search-progress focus squares from the shared WASM searcher; the main thread should treat those as transient UI hints and clear them on cancel, undo, reset, or result application.
 - Browser/native AI can short-circuit into the shared offline opening book for early red-side mainline moves before falling back to search.
