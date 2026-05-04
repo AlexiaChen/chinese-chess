@@ -141,3 +141,11 @@
 - **Evidence**: `AGENTS.md:48`, `AGENTS.md:49`, `web/src/bridge/wasmBridge.ts:71`, `src/engine/search.cpp:15`
 - **Confidence**: 10/10
 - **Action**: Whenever changing shared browser AI logic in C++ or the WASM bridge, run `make wasm` before or alongside `make web-build`, then validate against a fresh preview session.
+
+### L-018: [gotcha] Xiangqi river-width feedback usually points at board spacing before label typography (2026-05-04)
+- **Issue**: #82 — 优化棋盘UI
+- **Trigger**: river, 楚河汉界, board spacing, river gap, board UI
+- **Pattern**: On this board, the correct fix for an oversized `楚河/汉界` area was to shrink the river band itself back to normal cell spacing and only then tune the lettering. Changing glyph size first made the UI worse because the real problem lived in board geometry, not typography.
+- **Evidence**: `web/src/game/boardMetrics.ts:1`, `web/src/game/boardScene.ts:163`
+- **Confidence**: 9/10
+- **Action**: When future board-geometry feedback says `楚河/汉界 too wide`, inspect river-band metrics before touching label typography.
