@@ -20,8 +20,8 @@ const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
 const battleNotification = ref<BattleNotification | null>(null)
 
-const AI_MAX_DEPTH = 20
-const AI_TIME_BUDGET_MS = 5000
+const AI_MAX_DEPTH = 30
+const AI_TIME_BUDGET_MS = 30000
 
 type AppliedMovePayload = {
   move: string
