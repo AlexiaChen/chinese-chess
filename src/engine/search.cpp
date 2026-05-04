@@ -1,5 +1,6 @@
 #include "engine/search.h"
 #include "engine/opening_book.h"
+#include "engine/pikafish_nnue.h"
 #include "engine/uci_codec.h"
 
 #include <algorithm>
@@ -1058,8 +1059,24 @@ SearchContext make_context(const SearchOptions& options) {
 }  // namespace
 
 int evaluate_position(const GameState& state) {
+    if (state.is_in_check(state.side_to_move())) {
+        return evaluate_for_side_to_move(state);
+    }
+
+    if (const auto nnue_score = try_evaluate_position_with_pikafish_nnue(state); nnue_score.has_value()) {
+        return *nnue_score;
+    }
+
     return evaluate_for_side_to_move(state);
 }
+
+namespace {
+
+int evaluate_position_legacy(const GameState& state) {
+    return evaluate_for_side_to_move(state);
+}
+
+}  // namespace
 
 SearchResult search_best_move(const GameState& state, const SearchOptions& options) {
     if (options.max_depth <= 0) {

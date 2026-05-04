@@ -20,7 +20,7 @@
 - ✅ Web Worker 异步搜索，AI 思考不阻塞 UI
 - ✅ 内置开局库：红方早期主线直接返回，无需搜索
 - ✅ 搜索算法：迭代加深 + 置换表（TT）+ 杀手启发 + 历史启发 + 静态搜索（QSearch）+ Null-Move Pruning + Aspiration Windows + 根节点 PVS
-- ✅ 评估函数：材料分 + 棋子位置表 + 压将线特征（车/炮对准将线额外加分）
+- ✅ 评估函数：共享 C++ 核心内集成 Pikafish NNUE，浏览器与原生搜索共用同一套推理路径
 - ✅ 默认搜索预算：5000ms，最大深度 20 层
 - ✅ AI 分析面板：实时显示最佳走法、评估分、完成深度、节点数、用时及主要变例（PV）
 
@@ -65,7 +65,9 @@ git submodule update --init --depth 1 third_party/pikafish
 make wasm
 ```
 
-这会生成 `web/public/wasm/chinese_chess_wasm.js` 和 `.wasm`。
+这会生成浏览器运行时产物：
+
+- `web/public/wasm/chinese_chess_wasm.js/.wasm/.data`：规则引擎、搜索器，以及随共享 WASM 一起预加载的 `pikafish.nnue`
 
 > **注意**：WASM 目标编译时启用了 `-sENVIRONMENT=web,worker`，以支持在 Web Worker 内加载模块。
 
@@ -85,7 +87,7 @@ make web-dev       # 启动 Vite 开发服务器
 ```
 make help               # 查看所有可用命令
 make test               # 构建 C++ 并运行全套测试
-make wasm               # 构建 WebAssembly 桥接层（含 Worker 支持）
+make wasm               # 构建共享 WASM（包含 NNUE 模型数据）
 make web-install        # 安装前端 npm 依赖
 make web-dev            # 启动前端开发服务器（热重载，http://localhost:5173）
 make web-build          # 构建生产版前端包
@@ -112,7 +114,7 @@ make test
 - UCI 编解码（Pikafish 方言）
 - WASM 桥接层
 - 搜索引擎节点预算与搜索树压缩验证
-- 评估函数压将线特征回归测试
+- NNUE 接入回归、回退路径与轻子残局评估回归
 
 ---
 
@@ -126,6 +128,7 @@ chinese-chess/
 │   │   ├── search.h/.cpp       # 可移植搜索引擎（迭代加深 + TT + QSearch + Null-Move + PVS）
 │   │   ├── opening_book.h/.cpp # 离线开局库（早期红方主线）
 │   │   ├── uci_codec.h/.cpp    # Pikafish 兼容 UCI 坐标编解码
+│   │   ├── pikafish_nnue.h/.cpp # 共享核心里的 Pikafish NNUE 适配层
 │   │   └── pikafish_process.h/.cpp  # 本地 UCI 子进程适配器（原生模式）
 │   ├── bridge/
 │   │   ├── browser_session.h/.cpp   # 带走棋历史的浏览器会话层
@@ -170,7 +173,11 @@ chinese-chess/
 
 ## AI 搜索说明
 
-浏览器 AI 使用内置的可移植 C++ 搜索引擎（编译为 WASM），在独立的 Web Worker 线程中运行，不会阻塞 UI。
+浏览器 AI 仍在独立的 Web Worker 中运行，不会阻塞 UI。当前运行时会：
+
+1. 加载共享 `chinese_chess_wasm` 模块
+2. 在 Worker 中从 FEN 快照驱动现有搜索器
+3. 由共享核心内部调用 Pikafish NNUE 做静态评估
 
 **搜索算法**（`src/engine/search.cpp`）：
 - 迭代加深（Iterative Deepening）
@@ -183,15 +190,14 @@ chinese-chess/
 - 根节点主变例搜索（Root PVS）
 
 **评估函数**：
-- 各兵种材料分
-- 棋子位置分（PST）
-- 压将线特征：车/炮与对方将帅在同一文/横线时给予额外加分
+- Pikafish NNUE 推理（与浏览器 / 原生共享）
+- 对于 Pikafish 不接受的局面，安全回退到仓库原有的手工评估器
 
 **开局库**：内置红方早期主线，对局开始若干步内直接返回预设着法，跳过搜索。
 
-**默认参数**：时间预算 2000ms，最大深度 20 层。
+**默认参数**：时间预算 5000ms，最大深度 20 层。
 
-> Pikafish 引擎（`third_party/pikafish/`）仅用于本地原生模式，浏览器版本不使用 Pikafish。
+> 当前 GitHub Pages / 单线程浏览器运行时里，Pikafish 的完整 `Engine` 搜索路径仍不适合直接搬进浏览器，因为它依赖 `std::thread` 工作线程；本项目采用的是“共享搜索器 + 移植后的 NNUE 评估”这条可部署路径。
 
 ---
 
@@ -211,9 +217,12 @@ rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
 
 ---
 
-## 使用 Pikafish 引擎（可选，仅本地）
+## 使用 Pikafish 引擎（本地）
 
-Pikafish 是专为中国象棋设计的强力引擎（基于 Stockfish 改造），以 git 子模块形式包含在本仓库中，**仅供本地原生模式使用**。
+Pikafish 是专为中国象棋设计的强力引擎（基于 Stockfish 改造），以 git 子模块形式包含在本仓库中。
+
+- **本地原生模式**：可直接编译原生引擎并通过 CLI 做冒烟测试
+- **浏览器部署模式**：仓库直接复用 Pikafish 的 NNUE 推理代码和 `pikafish.nnue` 模型，但不在浏览器里运行完整 Pikafish `Engine` 搜索
 
 ```bash
 make pikafish      # 编译引擎（约需 2-5 分钟）

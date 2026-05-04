@@ -21,19 +21,28 @@ self.onmessage = async (event: MessageEvent<AiSearchWorkerRequest>) => {
 
   try {
     const bridge = await getBridge()
+    const onProgress = (progress: {
+      currentMove: string
+      depth: number
+      analyzedRootMoves: number
+      totalRootMoves: number
+      visitedNodes: number
+    }) => {
+      const response: AiSearchWorkerResponse = {
+        type: 'progress',
+        requestId: message.requestId,
+        progress,
+      }
+      self.postMessage(response)
+    }
+
     const report = bridge.searchAiMoveForFenWithProgress(
       message.fen,
       message.maxDepth,
       message.timeBudgetMs,
-      (progress) => {
-        const response: AiSearchWorkerResponse = {
-          type: 'progress',
-          requestId: message.requestId,
-          progress,
-        }
-        self.postMessage(response)
-      },
+      onProgress,
     )
+
     const response: AiSearchWorkerResponse = {
       type: 'result',
       requestId: message.requestId,

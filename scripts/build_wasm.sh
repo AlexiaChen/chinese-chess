@@ -27,3 +27,4 @@ cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --target chinese_chess_was
 mkdir -p "${PUBLIC_WASM_DIR}"
 cp "${BUILD_DIR}/chinese_chess_wasm.js" "${PUBLIC_WASM_DIR}/"
 cp "${BUILD_DIR}/chinese_chess_wasm.wasm" "${PUBLIC_WASM_DIR}/"
+cp "${BUILD_DIR}/chinese_chess_wasm.data" "${PUBLIC_WASM_DIR}/"
