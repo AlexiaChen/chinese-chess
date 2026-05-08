@@ -1,5 +1,7 @@
 #include "engine/search.h"
 #include "engine/opening_book.h"
+#include "engine/pikafish_search.h"
+#include "engine/pikafish_nnue.h"
 #include "engine/uci_codec.h"
 
 #include <algorithm>
@@ -1058,29 +1060,24 @@ SearchContext make_context(const SearchOptions& options) {
 }  // namespace
 
 int evaluate_position(const GameState& state) {
+    if (state.is_in_check(state.side_to_move())) {
+        return evaluate_for_side_to_move(state);
+    }
+
+    if (const auto nnue_score = try_evaluate_position_with_pikafish_nnue(state); nnue_score.has_value()) {
+        return *nnue_score;
+    }
+
     return evaluate_for_side_to_move(state);
 }
 
-SearchResult search_best_move(const GameState& state, const SearchOptions& options) {
-    if (options.max_depth <= 0) {
-        throw std::invalid_argument("Max depth must be positive");
-    }
-    if (options.time_budget_ms < 0) {
-        throw std::invalid_argument("Time budget must be non-negative");
-    }
+namespace {
 
-    const auto started_at = std::chrono::steady_clock::now();
-    if (const std::optional<Move> book_move = find_opening_book_move(state); book_move.has_value()) {
-        SearchResult result;
-        result.best_move = *book_move;
-        result.principal_variation.push_back(*book_move);
-        result.elapsed_ms = static_cast<int>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - started_at)
-                .count());
-        return result;
-    }
+int evaluate_position_legacy(const GameState& state) {
+    return evaluate_for_side_to_move(state);
+}
 
+SearchResult search_best_move_legacy(const GameState& state, const SearchOptions& options) {
     SearchContext context = make_context(options);
     SearchResult result;
 
@@ -1128,10 +1125,6 @@ SearchResult search_best_move(const GameState& state, const SearchOptions& optio
     }
 
     result.visited_nodes = context.visited_nodes;
-    result.elapsed_ms = static_cast<int>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - started_at)
-            .count());
 
     GameState pv_state = state;
     const int pv_limit = std::max(result.completed_depth, 1);
@@ -1150,6 +1143,41 @@ SearchResult search_best_move(const GameState& state, const SearchOptions& optio
         result.principal_variation.push_back(*result.best_move);
     }
 
+    return result;
+}
+
+}  // namespace
+
+SearchResult search_best_move(const GameState& state, const SearchOptions& options) {
+    if (options.max_depth <= 0) {
+        throw std::invalid_argument("Max depth must be positive");
+    }
+    if (options.time_budget_ms < 0) {
+        throw std::invalid_argument("Time budget must be non-negative");
+    }
+
+    const auto started_at = std::chrono::steady_clock::now();
+    if (const std::optional<Move> book_move = find_opening_book_move(state); book_move.has_value()) {
+        SearchResult result;
+        result.best_move = *book_move;
+        result.principal_variation.push_back(*book_move);
+        result.elapsed_ms = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started_at)
+                .count());
+        return result;
+    }
+    const std::optional<SearchResult> pikafish_result = try_search_best_move_with_pikafish(state, options);
+    if (!pikafish_result.has_value()) {
+        throw std::runtime_error("Pikafish search does not support this position");
+    }
+    SearchResult result = *pikafish_result;
+    if (result.elapsed_ms == 0) {
+        result.elapsed_ms = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started_at)
+                .count());
+    }
     return result;
 }
 

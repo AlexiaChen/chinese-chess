@@ -20,8 +20,55 @@ const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
 const battleNotification = ref<BattleNotification | null>(null)
 
-const AI_MAX_DEPTH = 30
-const AI_TIME_BUDGET_MS = 30000
+type AiDifficultyKey = 'rookie' | 'intermediate' | 'hard' | 'master' | 'grandmaster'
+
+type AiDifficultyPreset = {
+  key: AiDifficultyKey
+  label: string
+  maxDepth: number
+  timeBudgetMs: number
+  summary: string
+}
+
+const AI_DIFFICULTY_PRESETS: AiDifficultyPreset[] = [
+  {
+    key: 'rookie',
+    label: '菜鸟',
+    maxDepth: 6,
+    timeBudgetMs: 1000,
+    summary: '接近秒回，适合轻松体验。',
+  },
+  {
+    key: 'intermediate',
+    label: '中级',
+    maxDepth: 8,
+    timeBudgetMs: 2000,
+    summary: '会给一些压力，等待仍然可接受。',
+  },
+  {
+    key: 'hard',
+    label: '高难',
+    maxDepth: 12,
+    timeBudgetMs: 3500,
+    summary: '默认档，偏重棋力但还不至于太磨人。',
+  },
+  {
+    key: 'master',
+    label: '大师',
+    maxDepth: 16,
+    timeBudgetMs: 8000,
+    summary: '明显更强，适合愿意等待更久的玩家。',
+  },
+  {
+    key: 'grandmaster',
+    label: '特级大师',
+    maxDepth: 20,
+    timeBudgetMs: 15000,
+    summary: '保留最高搜索上限，单步思考时间最长。',
+  },
+]
+
+const aiDifficulty = ref<AiDifficultyKey>('hard')
 
 type AppliedMovePayload = {
   move: string
@@ -62,15 +109,27 @@ declare global {
       currentFen: () => string
       legalMovesFrom: (square: string) => string[]
       setAiEnabled: (enabled: boolean) => void
+      setAiDifficulty: (difficulty: AiDifficultyKey) => void
       setHumanSide: (side: 'w' | 'b') => void
       reset: () => void
     }
   }
 }
 
+function formatAiTimeBudget(timeBudgetMs: number) {
+  const seconds = timeBudgetMs / 1000
+  return Number.isInteger(seconds) ? `${seconds} 秒` : `${seconds.toFixed(1)} 秒`
+}
+
 const activeSideToken = computed(() => currentFen.value.split(' ')[1] ?? 'w')
 const activeSide = computed(() => sideLabel(activeSideToken.value))
 const aiSide = computed(() => (humanSide.value === 'w' ? 'b' : 'w'))
+const selectedAiPreset = computed(
+  () => AI_DIFFICULTY_PRESETS.find((preset) => preset.key === aiDifficulty.value) ?? AI_DIFFICULTY_PRESETS[2],
+)
+const aiMaxDepth = computed(() => selectedAiPreset.value.maxDepth)
+const aiTimeBudgetMs = computed(() => selectedAiPreset.value.timeBudgetMs)
+const aiTimeBudgetLabel = computed(() => formatAiTimeBudget(aiTimeBudgetMs.value))
 const humanTurn = computed(() => activeSideToken.value === humanSide.value)
 const interactionLocked = computed(() => aiThinking.value || (aiEnabled.value && !humanTurn.value))
 const canUndo = computed(() => {
@@ -113,6 +172,7 @@ const undoHint = computed(() =>
 )
 const setupTips: string[] = [
   '支持选择我先或 AI 先，开局会自动按选定方落子。',
+  '左侧 5 档 AI 难度会改变下一回合的搜索预算；高档位更强，但等待也更久。',
   '棋盘会自动让玩家一方保持在下方，避免操作河对面的棋子。',
   'AI 思考时会用绿色方框跳动标出当前正在分析的起手棋子，落子后继续保留上一步路径与搜索摘要。',
   '关闭 AI 后仍可作为双人对弈棋盘使用。',
@@ -141,7 +201,7 @@ function refreshBridgeStatus() {
   }
 
   if (aiThinking.value) {
-    bridgeStatus.value = `AI 正在思考（深度 ${AI_MAX_DEPTH}）…`
+    bridgeStatus.value = `AI 正在思考（${selectedAiPreset.value.label}，深度上限 ${aiMaxDepth.value}，最长 ${aiTimeBudgetLabel.value}）…`
     return
   }
 
@@ -443,7 +503,7 @@ async function maybeRunAiTurn() {
 
   let aiReport: AiMoveReport | null = null
   try {
-    aiReport = await requestAiMoveReport(fenBeforeAiMove, AI_MAX_DEPTH, AI_TIME_BUDGET_MS)
+    aiReport = await requestAiMoveReport(fenBeforeAiMove, aiMaxDepth.value, aiTimeBudgetMs.value)
   } catch (error) {
     aiThinking.value = false
     clearAiThinkingProgress()
@@ -527,6 +587,10 @@ function setHumanSide(side: 'w' | 'b') {
 
 function toggleAi() {
   setAiEnabled(!aiEnabled.value)
+}
+
+function setAiDifficulty(difficulty: AiDifficultyKey) {
+  aiDifficulty.value = difficulty
 }
 
 onMounted(async () => {
@@ -633,6 +697,9 @@ watchEffect(() => {
     },
     setAiEnabled(enabled: boolean) {
       setAiEnabled(enabled)
+    },
+    setAiDifficulty(difficulty: AiDifficultyKey) {
+      setAiDifficulty(difficulty)
     },
     setHumanSide(side: 'w' | 'b') {
       setHumanSide(side)
@@ -751,8 +818,38 @@ watchEffect(() => {
                   局面控制
                 </span>
                 <span class="font-mono text-xs text-stone-400/70">
-                  {{ aiEnabled ? `AI 深度 ${AI_MAX_DEPTH}` : 'AI 已关闭' }}
+                  {{ aiEnabled ? `${selectedAiPreset.label} · 深度 ${aiMaxDepth} / ${aiTimeBudgetLabel}` : 'AI 已关闭' }}
                 </span>
+              </div>
+              <div class="mt-3 rounded-[18px] border border-white/8 bg-black/20 px-4 py-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-stone-200/85">AI 难度</span>
+                  <span class="font-mono tracking-wide text-stone-400/75">
+                    {{ `${selectedAiPreset.label} · 深度 ${selectedAiPreset.maxDepth} / ${formatAiTimeBudget(selectedAiPreset.timeBudgetMs)}` }}
+                  </span>
+                </div>
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    v-for="preset in AI_DIFFICULTY_PRESETS"
+                    :key="preset.key"
+                    type="button"
+                    class="rounded-[18px] border px-4 py-3 text-left transition"
+                    :class="
+                      selectedAiPreset.key === preset.key
+                        ? 'border-amber-300/35 bg-amber-400/12 text-amber-50 shadow-[0_10px_28px_rgba(212,106,49,0.18)]'
+                        : 'border-white/10 bg-white/[0.03] text-stone-200/85 hover:border-amber-200/35 hover:bg-white/[0.06]'
+                    "
+                    @click="setAiDifficulty(preset.key)"
+                  >
+                    <span class="block font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base">{{ preset.label }}</span>
+                    <span class="mt-1 block font-mono text-[11px] text-stone-300/75">
+                      {{ `深度 ${preset.maxDepth} / ${formatAiTimeBudget(preset.timeBudgetMs)}` }}
+                    </span>
+                    <span class="mt-2 block text-xs leading-5 text-stone-300/70">
+                      {{ preset.summary }}
+                    </span>
+                  </button>
+                </div>
               </div>
               <div class="mt-3 grid gap-3 sm:grid-cols-3">
                 <button

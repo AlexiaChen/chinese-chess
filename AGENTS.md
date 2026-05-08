@@ -4,6 +4,7 @@
 
 - Repository now has a native CMake skeleton, a portable rules core, a CLI target, and a test target.
 - The active goal is to build a Chinese chess game with human-vs-AI play, local execution, and a web build deployable to GitHub Pages.
+- The browser NNUE path is now e2e-working again: after a human move, the AI can search in shared WASM and auto-apply its reply instead of failing mid-search.
 
 ## Architecture
 
@@ -12,7 +13,9 @@
   - `src/core/game.h/.cpp`: board state, FEN parsing, legal move generation, move application, and check detection
   - `src/engine/opening_book.h/.cpp`: offline opening-book lines for early-game AI move selection before full search
   - `src/engine/uci_codec.h/.cpp`: bridge between internal coordinates and Pikafish-style UCI square/move strings
-- `src/engine/search.h/.cpp`: portable Xiangqi search with iterative deepening, aspiration windows, root PVS, null-move pruning, move ordering, transposition caching, quiescence search with delta pruning, a phase-aware feature-based evaluator (including public `evaluate_position()` and Xiangqi king-safety / palace-pressure / horse-cannon-activity / soldier-structure scoring), plus shallow AI-side search progress callbacks for native/WASM gameplay
+- `src/engine/search.h/.cpp`: public search/eval API; opening-book positions still short-circuit here, while normal supported gameplay positions now dispatch into the embedded Pikafish search adapter instead of the older handcrafted searcher
+  - `src/engine/pikafish_search.h/.cpp`: embedded single-thread Pikafish `Engine` adapter for native/WASM; converts `GameState` FEN into Pikafish search calls, streams root-progress updates back to the browser bridge, and surfaces unsupported positions explicitly instead of silently falling back during search
+  - `src/engine/pikafish_nnue.h/.cpp`: single-threaded adapter that loads `third_party/pikafish/src/pikafish.nnue`, converts `GameState` FEN into a Pikafish `Position`, runs Pikafish NNUE inference inside the shared core, falls back to the legacy handcrafted evaluator when a position is unsupported by Pikafish's validator, and reuses heap-backed Pikafish workspaces so deeper WASM searches do not blow the browser stack
   - `src/engine/pikafish_process.h/.cpp`: native UCI subprocess adapter for a Pikafish-compatible engine command
 - `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine, including move history for browser-side undo, current-position status reporting (check / legal-move availability), plus side-effect-free AI search from an arbitrary FEN snapshot
 - `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `current_position_status`, `apply_move`, `undo_last_move`, `undo_count`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `search_ai_move_for_fen_with_report`, `reset`)
@@ -21,8 +24,8 @@
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
   - `third_party/pikafish`: official Pikafish source as a git submodule
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
-  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV), short-lived battle notifications for capture/check/mate, live AI-thinking square state, and the current depth-20 / 5000ms browser AI defaults
-  - `web/src/workers/aiSearchWorker.ts`: dedicated Web Worker that loads the WASM bridge, searches from FEN snapshots off the main thread, streams progress updates, and returns summarized AI reports to the Vue shell
+  - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, 5 selectable browser AI difficulty presets, summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV), short-lived battle notifications for capture/check/mate, and live AI-thinking square state
+  - `web/src/workers/aiSearchWorker.ts`: dedicated Web Worker that loads the shared search WASM bridge, searches from FEN snapshots off the main thread, and streams summarized progress back to Vue
   - `web/src/components/PhaserBoard.vue`: Phaser board wrapper with DOM piece/move overlays, a green AI-thinking square overlay, SVG path highlighting for the AI's latest move, and structured move-applied events carrying pre/post-move FEN for the Vue shell
   - `web/src/game/boardScene.ts`: Phaser scene that draws the square-cell Xiangqi board, a normal-width river band with horizontal `楚河 / 汉界` labels, traditional soldier/cannon position markers, and the rendered pieces
   - `.github/workflows/ci.yml`: GitHub Actions CI for native tests plus WASM/frontend builds
@@ -49,7 +52,7 @@
 - Frontend dev: `make web-dev`
 - Frontend preview: `make web-preview`
 - Frontend build: `make web-build` or `make web-bundle`
-- WASM build: `make wasm`/`make wasm-debug` for Debug, `make wasm-release` for Release
+- WASM build: `make wasm`/`make wasm-debug` for Debug, `make wasm-release` for Release (emits `chinese_chess_wasm.js/.wasm/.data`; the `.data` payload carries `pikafish.nnue` for the shared NNUE evaluator, and the browser bridge must resolve all three assets from the same `/wasm/` directory)
 - Pages-targeted frontend build: `make pages-build` (always builds Release WASM first)
 
 ## Code Conventions
@@ -65,12 +68,16 @@
 - Board presentation is view-only and can flip automatically with the player's side so the human-controlled army stays on the near side while rules/FEN remain unchanged.
 - Keep the river band aligned with normal cell spacing; if `楚河 / 汉界` looks too large, inspect board geometry before shrinking the label glyphs.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
+- Browser gameplay search now uses the embedded single-thread Pikafish `Engine` path even in WASM; `third_party/pikafish/src/thread.cpp` runs the one-thread job flow inline under Emscripten so the browser build does not depend on pthread-enabled workers.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
-- Default browser AI tuning currently uses `max depth = 20` with a `5000ms` budget; future strength work should prefer making that budget more selective before pushing browser waits much higher.
+- Browser AI presets now span `菜鸟 6/1000ms`, `中级 8/2000ms`, `高难 12/3500ms` (default), `大师 16/8000ms`, and `特级大师 20/15000ms`; the browser UI exposes these directly so strength tuning should preserve the full ladder rather than only a single hard-coded budget.
 - The Vue shell owns the live BrowserSession state; Worker-based AI searches must operate on FEN snapshots and return moves/reports that the main thread applies to the authoritative session.
 - Worker-based browser AI can also stream search-progress focus squares from the shared WASM searcher; the main thread should treat those as transient UI hints and clear them on cancel, undo, reset, or result application.
 - Browser/native AI can short-circuit into the shared offline opening book for early red-side mainline moves before falling back to search.
-- The current evaluator stays in the handcrafted / feature-based family; when extending it, prefer Xiangqi-specific pressure/activity signals that keep the shared WASM core lightweight before attempting NNUE-scale complexity.
+- Search no longer falls back to the older handcrafted engine when Pikafish rejects a position; unsupported/artificial positions now surface an explicit error instead. The legacy handcrafted path still exists only inside the standalone evaluator fallback.
+- In browser/WASM, keep large Pikafish temporaries off the stack: the NNUE adapter already reuses heap-backed `Position`, `StateInfo`, `AccumulatorStack`, and `AccumulatorCaches`, and the embedded Pikafish search now heap-allocates its root `Stack[MAX_PLY + 10]` workspace to avoid unnecessary WASM stack pressure.
+- The browser WASM target now also pins `-sSTACK_SIZE=8388608`; without the larger stack budget, embedded Pikafish search can run past the default Emscripten stack and die mid-search with `memory access out of bounds`.
+- When validating browser AI, distinguish opening-book plies from true search: `AI先（AI执红）` can auto-move with `completed depth = 0` and `visited nodes = 0`, so use a post-opening human move such as `a3a4` to confirm the real NNUE-backed search path and automatic AI reply.
 - Strength tuning should add direct evaluator regressions and preserve the midgame node-budget guardrail in the same change, so heuristic gains do not silently bloat search cost.
 - Player-facing AI feedback should use summarized search reports from the WASM bridge (last move, eval, completed depth, visited nodes, elapsed time, PV) instead of streaming every explored node to the UI.
 - GitHub Pages deployment assumes the repository path base `/chinese-chess/`.

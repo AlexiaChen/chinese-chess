@@ -70,17 +70,26 @@ type SearchProgressHookHost = typeof globalThis & {
   ) => void
 }
 
+interface EmscriptenModuleOverrides {
+  locateFile?: (path: string, prefix: string) => string
+}
+
 interface EmscriptenModuleFactory {
-  default: () => Promise<EmscriptenRuntime>
+  default: (moduleOverrides?: EmscriptenModuleOverrides) => Promise<EmscriptenRuntime>
 }
 
 export async function createWasmBridge(): Promise<BrowserBridge> {
   const wasmEntrypoint = `${import.meta.env.BASE_URL}wasm/chinese_chess_wasm.js`
+  const wasmAssetBase = new URL(`${import.meta.env.BASE_URL}wasm/`, globalThis.location.href).toString()
   const moduleFactory = (await import(
     /* @vite-ignore */ wasmEntrypoint
   )) as EmscriptenModuleFactory
 
-  const runtime = await moduleFactory.default()
+  const runtime = await moduleFactory.default({
+    locateFile(path) {
+      return new URL(path, wasmAssetBase).toString()
+    },
+  })
 
   const currentFen = runtime.cwrap<() => string>('chinese_chess_current_fen', 'string', [])
   const legalMovesFrom = runtime.cwrap<(square: string) => string>(

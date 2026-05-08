@@ -1,5 +1,6 @@
 #include "core/game.h"
 #include "bridge/browser_session.h"
+#include "engine/pikafish_search.h"
 #include "engine/pikafish_process.h"
 #include "engine/search.h"
 #include "engine/uci_codec.h"
@@ -47,6 +48,15 @@ std::vector<Move> collect_all_legal_moves(const GameState& state) {
         }
     }
     return moves;
+}
+
+GameState supported_midgame_position() {
+    GameState position = GameState::initial();
+    for (std::string_view move : {"a3a4", "a6a5", "b2e2", "b9c7", "h0g2", "h7e7"}) {
+        expect(position.apply_move(chinese_chess::engine::from_uci_move(move)),
+               "Supported probe line should stay legal");
+    }
+    return position;
 }
 
 void fen_round_trip_test() {
@@ -277,8 +287,7 @@ void search_uses_opening_book_for_red_first_moves_test() {
 }
 
 void search_midgame_node_budget_test() {
-    const GameState game = GameState::from_fen(
-        "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
+    const GameState game = supported_midgame_position();
     const auto report = chinese_chess::engine::search_best_move(
         game,
         chinese_chess::engine::SearchOptions {
@@ -288,50 +297,99 @@ void search_midgame_node_budget_test() {
 
     expect(report.best_move.has_value(), "Midgame search should still produce a move");
     expect(report.completed_depth == 5, "Untimed midgame search should finish the requested depth");
-    expect(report.visited_nodes < 170000,
-           "Midgame search should stay under the node budget after pruning improvements");
+    expect(report.visited_nodes > 500,
+           "Embedded Pikafish midgame search should traverse a non-trivial node count");
+    expect(report.visited_nodes < 300000,
+           "Embedded Pikafish midgame search should stay within a reviewable node budget");
 }
 
-void feature_based_evaluation_rewards_general_file_pressure_test() {
-    const GameState aligned_pressure = GameState::from_fen("4k4/9/4n4/9/4R4/9/9/9/9/4K4 w - - 0 1");
-    const GameState neutral_rook = GameState::from_fen("4k4/9/4n4/9/3R5/9/9/9/9/4K4 w - - 0 1");
+void embedded_pikafish_search_finishes_requested_depth_test() {
+    const GameState position = supported_midgame_position();
 
-    const int aligned_score = chinese_chess::engine::evaluate_position(aligned_pressure);
-    const int neutral_score = chinese_chess::engine::evaluate_position(neutral_rook);
+    const auto report = chinese_chess::engine::try_search_best_move_with_pikafish(
+        position,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 4,
+            .time_budget_ms = 0,
+        });
 
-    expect(aligned_score >= neutral_score + 30,
-           "Feature-based evaluation should reward rook pressure on the enemy general file");
+    expect(report.has_value(), "Supported middlegames should use the embedded Pikafish searcher");
+    expect(report->best_move.has_value(), "Embedded Pikafish search should return a best move");
+    expect(report->completed_depth == 4,
+           "Embedded Pikafish search should finish the requested untimed depth");
+    expect(report->visited_nodes > 500,
+           "Embedded Pikafish search should traverse a non-trivial node count");
+    expect(!report->principal_variation.empty(),
+           "Embedded Pikafish search should expose a principal variation");
 }
 
-void feature_based_evaluation_rewards_palace_pressure_test() {
-    const GameState active_attack = GameState::from_fen("4k4/3H1R3/4C4/9/9/9/9/9/9/4K4 w - - 0 1");
-    const GameState retreated_attack = GameState::from_fen("4k4/9/9/3H5/4C4/4R4/9/9/9/4K4 w - - 0 1");
+void unsupported_pikafish_positions_are_rejected_by_search_test() {
+    const GameState unsupported_position = GameState::from_fen(
+        "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
 
-    const int active_score = chinese_chess::engine::evaluate_position(active_attack);
-    const int retreated_score = chinese_chess::engine::evaluate_position(retreated_attack);
+    const auto report = chinese_chess::engine::try_search_best_move_with_pikafish(
+        unsupported_position,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 3,
+            .time_budget_ms = 0,
+        });
 
-    expect(active_score >= retreated_score + 24,
-           "Feature-based evaluation should reward pressure concentrated near the enemy palace");
+    expect(!report.has_value(),
+           "Unsupported positions should decline the embedded Pikafish path");
+
+    bool threw = false;
+    try {
+        static_cast<void>(chinese_chess::engine::search_best_move(
+            unsupported_position,
+            chinese_chess::engine::SearchOptions {
+                .max_depth = 3,
+                .time_budget_ms = 0,
+            }));
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    expect(threw, "Public search should surface unsupported Pikafish positions instead of falling back");
 }
 
-void feature_based_evaluation_rewards_horse_and_cannon_activity_test() {
-    const GameState active_horse = GameState::from_fen("4k4/9/9/p8/4N4/8p/9/9/9/4K4 w - - 0 1");
-    const GameState blocked_horse = GameState::from_fen("4k4/9/9/4p4/4N4/4p4/9/9/9/4K4 w - - 0 1");
-    const GameState active_cannon = GameState::from_fen("4k4/9/9/p8/4C4/8p/9/9/9/4K4 w - - 0 1");
-    const GameState blocked_cannon = GameState::from_fen("4k4/9/9/4p4/4C4/4p4/9/9/9/4K4 w - - 0 1");
+void nnue_evaluation_is_side_to_move_relative_test() {
+    const GameState red_advantage = GameState::from_fen("4k4/9/9/9/4R4/9/9/9/9/4K4 w - - 0 1");
+    const GameState black_to_move = GameState::from_fen("4k4/9/9/9/4R4/9/9/9/9/4K4 b - - 0 1");
 
-    const int horse_delta = chinese_chess::engine::evaluate_position(active_horse)
-        - chinese_chess::engine::evaluate_position(blocked_horse);
-    const int cannon_delta = chinese_chess::engine::evaluate_position(active_cannon)
-        - chinese_chess::engine::evaluate_position(blocked_cannon);
+    const int red_score = chinese_chess::engine::evaluate_position(red_advantage);
+    const int black_score = chinese_chess::engine::evaluate_position(black_to_move);
 
-    expect(horse_delta >= 16,
-           "Feature-based evaluation should reward horses with freer legs and more activity");
-    expect(cannon_delta >= 16,
-           "Feature-based evaluation should reward cannons with freer lines and more activity");
+    expect(red_score > 500, "NNUE evaluation should reward the side to move when it has a free rook");
+    expect(black_score < -500,
+           "NNUE evaluation should flip sign when the disadvantaged side is to move in the same position");
 }
 
-void feature_based_evaluation_scales_connected_soldiers_for_endgames_test() {
+void nnue_evaluation_rewards_simple_material_advantage_test() {
+    const GameState bare_kings = GameState::from_fen("4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1");
+    const GameState extra_horse = GameState::from_fen("4k4/9/9/9/4N4/9/9/9/9/4K4 w - - 0 1");
+    const GameState extra_pawn = GameState::from_fen("4k4/9/9/9/4P4/9/9/9/9/4K4 w - - 0 1");
+
+    const int bare_score = chinese_chess::engine::evaluate_position(bare_kings);
+    const int horse_score = chinese_chess::engine::evaluate_position(extra_horse);
+    const int pawn_score = chinese_chess::engine::evaluate_position(extra_pawn);
+
+    expect(bare_score == 0, "NNUE evaluation should keep bare kings balanced");
+    expect(horse_score > bare_score + 500,
+           "NNUE evaluation should strongly reward an extra horse in a simple endgame");
+    expect(pawn_score > bare_score + 300,
+           "NNUE evaluation should reward an extra pawn in a simple endgame");
+}
+
+void unsupported_pikafish_positions_keep_nnue_eval_guardrails_test() {
+    const GameState unsupported_position = GameState::from_fen(
+        "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
+
+    const int score = chinese_chess::engine::evaluate_position(unsupported_position);
+
+    expect(score > -20000 && score < 20000,
+            "Unsupported Pikafish positions should fall back to a sane non-mate evaluation");
+}
+
+void nnue_evaluation_still_values_connected_soldiers_in_lighter_positions_test() {
     const GameState connected_endgame = GameState::from_fen("4k4/9/9/9/3P1P3/9/9/9/9/4K4 w - - 0 1");
     const GameState split_endgame = GameState::from_fen("4k4/9/9/9/2P3P2/9/9/9/9/4K4 w - - 0 1");
     const GameState connected_middlegame = GameState::from_fen("r3k3r/9/9/9/3P1P3/9/9/9/9/R3K3R w - - 0 1");
@@ -343,7 +401,7 @@ void feature_based_evaluation_scales_connected_soldiers_for_endgames_test() {
         - chinese_chess::engine::evaluate_position(split_middlegame);
 
     expect(endgame_delta >= middlegame_delta + 10,
-           "Feature-based evaluation should amplify connected-soldier value more strongly in lighter endgames");
+           "NNUE evaluation should still value connected soldiers more strongly in lighter endgames");
 }
 
 void browser_session_bridge_test() {
@@ -436,10 +494,12 @@ int main() {
     search_progress_callback_exposes_root_candidates_test();
     search_uses_opening_book_for_red_first_moves_test();
     search_midgame_node_budget_test();
-    feature_based_evaluation_rewards_general_file_pressure_test();
-    feature_based_evaluation_rewards_palace_pressure_test();
-    feature_based_evaluation_rewards_horse_and_cannon_activity_test();
-    feature_based_evaluation_scales_connected_soldiers_for_endgames_test();
+    embedded_pikafish_search_finishes_requested_depth_test();
+    unsupported_pikafish_positions_are_rejected_by_search_test();
+    nnue_evaluation_is_side_to_move_relative_test();
+    nnue_evaluation_rewards_simple_material_advantage_test();
+    unsupported_pikafish_positions_keep_nnue_eval_guardrails_test();
+    nnue_evaluation_still_values_connected_soldiers_in_lighter_positions_test();
     browser_session_bridge_test();
     browser_session_fen_search_does_not_mutate_live_state_test();
     return 0;
