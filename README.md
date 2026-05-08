@@ -47,14 +47,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone --recursive https://github.com/AlexiaChen/chinese-chess.git
+git clone https://github.com/AlexiaChen/chinese-chess.git
 cd chinese-chess
-```
-
-如果已经克隆但忘了 `--recursive`：
-
-```bash
-git submodule update --init --depth 1 third_party/pikafish
 ```
 
 ### 2. 构建 WASM 桥接层
@@ -68,6 +62,8 @@ make wasm
 这会生成浏览器运行时产物：
 
 - `web/public/wasm/chinese_chess_wasm.js/.wasm/.data`：规则引擎、搜索器，以及随共享 WASM 一起预加载的 `pikafish.nnue`
+
+> **说明**：`third_party/pikafish` 现已直接作为仓库内源码维护，不再依赖 git submodule。
 
 > **注意**：WASM 目标编译时启用了 `-sENVIRONMENT=web,worker`，以支持在 Web Worker 内加载模块。
 

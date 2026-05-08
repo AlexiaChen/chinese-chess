@@ -20,9 +20,9 @@
 - `src/bridge/browser_session.h/.cpp`: browser-facing session wrapper over the core rules engine, including move history for browser-side undo, current-position status reporting (check / legal-move availability), plus side-effect-free AI search from an arbitrary FEN snapshot
 - `src/bridge/wasm_exports.cpp`: C ABI surface exported to the browser/WASM runtime (`current_fen`, `legal_moves_from`, `current_position_status`, `apply_move`, `undo_last_move`, `undo_count`, `apply_ai_move`, `apply_ai_move_with_limits`, `apply_ai_move_with_report`, `search_ai_move_for_fen_with_report`, `reset`)
   - `src/apps/cli/main.cpp`: native CLI target that can print the board or query a configured engine command for `bestmove`
-- `tests/game_tests.cpp`: rules, codec, evaluator regression, and node-budget coverage
+  - `tests/game_tests.cpp`: rules, codec, evaluator regression, and node-budget coverage
   - `tests/fixtures/fake_uci_engine.py`: fake UCI engine used for adapter tests
-  - `third_party/pikafish`: official Pikafish source as a git submodule
+  - `third_party/pikafish`: vendored Pikafish engine source kept directly in this repository so CI/browser builds do not depend on an external submodule checkout
 - `web/`: Vue 3 + Vite + TypeScript + Tailwind CSS + Phaser frontend, with Phaser as the render layer and DOM controls for interaction/testability
   - `web/src/App.vue`: player-facing shell for opening-side selection, AI turn orchestration, undo controls, 5 selectable browser AI difficulty presets, summarized AI insight cards (last move, eval, depth, nodes, elapsed time, PV), short-lived battle notifications for capture/check/mate, and live AI-thinking square state
   - `web/src/workers/aiSearchWorker.ts`: dedicated Web Worker that loads the shared search WASM bridge, searches from FEN snapshots off the main thread, and streams summarized progress back to Vue
@@ -69,6 +69,7 @@
 - Keep the river band aligned with normal cell spacing; if `楚河 / 汉界` looks too large, inspect board geometry before shrinking the label glyphs.
 - GitHub Pages-compatible web AI must stay inside the shared C++/WASM core; native-only subprocess engines like `PikafishProcess` cannot be used directly in the browser runtime.
 - Browser gameplay search now uses the embedded single-thread Pikafish `Engine` path even in WASM; `third_party/pikafish/src/thread.cpp` runs the one-thread job flow inline under Emscripten so the browser build does not depend on pthread-enabled workers.
+- Pikafish is now vendored directly under `third_party/pikafish`; when updating it, keep the Emscripten-specific `search.cpp` / `thread.cpp` / `thread.h` adjustments in-tree instead of relying on a local-only submodule commit.
 - Browser AI strength now depends on `SearchOptions`-style limits (max depth plus time budget) rather than a fixed-depth-only search contract.
 - Browser AI presets now span `菜鸟 6/1000ms`, `中级 8/2000ms`, `高难 12/3500ms` (default), `大师 16/8000ms`, and `特级大师 20/15000ms`; the browser UI exposes these directly so strength tuning should preserve the full ladder rather than only a single hard-coded budget.
 - The Vue shell owns the live BrowserSession state; Worker-based AI searches must operate on FEN snapshots and return moves/reports that the main thread applies to the authoritative session.

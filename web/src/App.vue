@@ -16,7 +16,7 @@ const aiThinking = ref(false)
 const aiThinkingMove = ref<string | null>(null)
 const humanSide = ref<'w' | 'b'>('w')
 const lastAiReport = ref<AiMoveReport | null>(null)
-const lastAiMoveLabel = ref('')
+// const lastAiMoveLabel = ref('')
 const undoCount = ref(0)
 const battleNotification = ref<BattleNotification | null>(null)
 

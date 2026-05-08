@@ -36,7 +36,7 @@ help:
 		'  make native-cli-release # Build and run the Release CLI smoke target' \
 		'  make fake-engine-smoke  # Run the Debug CLI against the fake UCI engine fixture' \
 		'  make fake-engine-smoke-release # Run the Release CLI against the fake UCI engine fixture' \
-		'  make pikafish           # Build the bundled Pikafish submodule' \
+		'  make pikafish           # Build the vendored Pikafish engine source' \
 		'  make engine-smoke       # Run the Debug CLI against the real Pikafish binary' \
 		'  make engine-smoke-release # Run the Release CLI against the real Pikafish binary' \
 		'  make wasm               # Build the Debug WebAssembly bridge artifacts' \
