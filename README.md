@@ -19,9 +19,9 @@
 - ✅ 内置 C++ 搜索引擎，编译为 WASM，浏览器端零服务端依赖
 - ✅ Web Worker 异步搜索，AI 思考不阻塞 UI
 - ✅ 内置开局库：红方早期主线直接返回，无需搜索
-- ✅ 搜索算法：迭代加深 + 置换表（TT）+ 杀手启发 + 历史启发 + 静态搜索（QSearch）+ Null-Move Pruning + Aspiration Windows + 根节点 PVS
+- ✅ 搜索算法：共享核心内嵌单线程 Pikafish 搜索/裁剪逻辑，浏览器与原生共用同一套搜索路径
 - ✅ 评估函数：共享 C++ 核心内集成 Pikafish NNUE，浏览器与原生搜索共用同一套推理路径
-- ✅ 默认搜索预算：5000ms，最大深度 20 层
+- ✅ 5 档 AI 难度：菜鸟 / 中级 / 高难 / 大师 / 特级大师，可在 UI 中切换搜索预算
 - ✅ AI 分析面板：实时显示最佳走法、评估分、完成深度、节点数、用时及主要变例（PV）
 
 ### 工程与部署
@@ -114,7 +114,7 @@ make test
 - UCI 编解码（Pikafish 方言）
 - WASM 桥接层
 - 搜索引擎节点预算与搜索树压缩验证
-- NNUE 接入回归、回退路径与轻子残局评估回归
+- 嵌入式 Pikafish 搜索回归、unsupported 局面拒绝路径与轻子残局评估回归
 
 ---
 
@@ -125,7 +125,8 @@ chinese-chess/
 ├── src/
 │   ├── core/               # C++ 象棋规则引擎（走法生成、将军检测、FEN 解析）
 │   ├── engine/
-│   │   ├── search.h/.cpp       # 可移植搜索引擎（迭代加深 + TT + QSearch + Null-Move + PVS）
+│   │   ├── search.h/.cpp       # 对外搜索/评估入口（开局库 + 嵌入式 Pikafish 搜索调度）
+│   │   ├── pikafish_search.h/.cpp # 共享核心里的单线程 Pikafish 搜索适配层（native/WASM 共用）
 │   │   ├── opening_book.h/.cpp # 离线开局库（早期红方主线）
 │   │   ├── uci_codec.h/.cpp    # Pikafish 兼容 UCI 坐标编解码
 │   │   ├── pikafish_nnue.h/.cpp # 共享核心里的 Pikafish NNUE 适配层
@@ -176,28 +177,24 @@ chinese-chess/
 浏览器 AI 仍在独立的 Web Worker 中运行，不会阻塞 UI。当前运行时会：
 
 1. 加载共享 `chinese_chess_wasm` 模块
-2. 在 Worker 中从 FEN 快照驱动现有搜索器
-3. 由共享核心内部调用 Pikafish NNUE 做静态评估
+2. 在 Worker 中从 FEN 快照驱动嵌入式 Pikafish 搜索
+3. 由共享核心内部调用 Pikafish NNUE 做静态评估与搜索打分
 
-**搜索算法**（`src/engine/search.cpp`）：
-- 迭代加深（Iterative Deepening）
-- 置换表（Transposition Table）
-- 杀手启发（Killer Heuristic）
-- 历史启发（History Heuristic）
-- 静态搜索（Quiescence Search）
-- Null-Move Pruning
-- Aspiration Windows
-- 根节点主变例搜索（Root PVS）
+**搜索路径**：
+- 开局命中共享离线开局库时直接返回
+- 其余正常对局局面走 `src/engine/pikafish_search.cpp` 内的单线程 Pikafish `Engine`
+- 为兼容 GitHub Pages / 普通 WASM，Emscripten 构建下会把 Pikafish 的单线程 job flow 改成同步执行，不依赖 `std::thread` worker
+- Pikafish 根搜索里的 `Stack[MAX_PLY + 10]` 根工作区已改成堆分配，降低浏览器 WASM 栈压力
 
 **评估函数**：
 - Pikafish NNUE 推理（与浏览器 / 原生共享）
-- 对于 Pikafish 不接受的局面，安全回退到仓库原有的手工评估器
+- 独立 `evaluate_position()` 仍保留安全评估兜底；但正式搜索路径不再静默回退到旧搜索器
 
 **开局库**：内置红方早期主线，对局开始若干步内直接返回预设着法，跳过搜索。
 
-**默认参数**：时间预算 5000ms，最大深度 20 层。
+**默认参数**：`高难` 档，时间预算 3500ms，最大深度 12 层；`特级大师` 保留 15000ms / 20 层上限。
 
-> 当前 GitHub Pages / 单线程浏览器运行时里，Pikafish 的完整 `Engine` 搜索路径仍不适合直接搬进浏览器，因为它依赖 `std::thread` 工作线程；本项目采用的是“共享搜索器 + 移植后的 NNUE 评估”这条可部署路径。
+> 对于人工构造、Pikafish 明确拒绝的异常局面，搜索接口会直接报错，而不是再悄悄切回旧搜索实现。
 
 ---
 
@@ -222,7 +219,7 @@ rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
 Pikafish 是专为中国象棋设计的强力引擎（基于 Stockfish 改造），以 git 子模块形式包含在本仓库中。
 
 - **本地原生模式**：可直接编译原生引擎并通过 CLI 做冒烟测试
-- **浏览器部署模式**：仓库直接复用 Pikafish 的 NNUE 推理代码和 `pikafish.nnue` 模型，但不在浏览器里运行完整 Pikafish `Engine` 搜索
+- **浏览器部署模式**：仓库直接复用 Pikafish 的 NNUE + 搜索/裁剪代码；通过单线程适配把这套路径放进共享 WASM 运行时
 
 ```bash
 make pikafish      # 编译引擎（约需 2-5 分钟）

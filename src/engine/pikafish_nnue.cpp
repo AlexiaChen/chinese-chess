@@ -91,15 +91,4 @@ std::optional<int> try_evaluate_position_with_pikafish_nnue(const GameState& sta
 
 namespace Stockfish {
 
-int UCIEngine::to_cp(Value v, const Position&) { return static_cast<int>(v); }
-
-std::string UCIEngine::square(Square s) {
-    const auto index = static_cast<int>(s);
-    const char file = static_cast<char>('a' + (index % 9));
-    const char rank = static_cast<char>('0' + (index / 9));
-    return std::string {file, rank};
-}
-
-TTEntry* TranspositionTable::first_entry(const Key) const { return nullptr; }
-
 }  // namespace Stockfish

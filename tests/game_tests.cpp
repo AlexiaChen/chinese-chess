@@ -1,5 +1,6 @@
 #include "core/game.h"
 #include "bridge/browser_session.h"
+#include "engine/pikafish_search.h"
 #include "engine/pikafish_process.h"
 #include "engine/search.h"
 #include "engine/uci_codec.h"
@@ -47,6 +48,15 @@ std::vector<Move> collect_all_legal_moves(const GameState& state) {
         }
     }
     return moves;
+}
+
+GameState supported_midgame_position() {
+    GameState position = GameState::initial();
+    for (std::string_view move : {"a3a4", "a6a5", "b2e2", "b9c7", "h0g2", "h7e7"}) {
+        expect(position.apply_move(chinese_chess::engine::from_uci_move(move)),
+               "Supported probe line should stay legal");
+    }
+    return position;
 }
 
 void fen_round_trip_test() {
@@ -277,8 +287,7 @@ void search_uses_opening_book_for_red_first_moves_test() {
 }
 
 void search_midgame_node_budget_test() {
-    const GameState game = GameState::from_fen(
-        "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
+    const GameState game = supported_midgame_position();
     const auto report = chinese_chess::engine::search_best_move(
         game,
         chinese_chess::engine::SearchOptions {
@@ -288,8 +297,58 @@ void search_midgame_node_budget_test() {
 
     expect(report.best_move.has_value(), "Midgame search should still produce a move");
     expect(report.completed_depth == 5, "Untimed midgame search should finish the requested depth");
-    expect(report.visited_nodes < 170000,
-           "Midgame search should stay under the node budget after pruning improvements");
+    expect(report.visited_nodes > 500,
+           "Embedded Pikafish midgame search should traverse a non-trivial node count");
+    expect(report.visited_nodes < 300000,
+           "Embedded Pikafish midgame search should stay within a reviewable node budget");
+}
+
+void embedded_pikafish_search_finishes_requested_depth_test() {
+    const GameState position = supported_midgame_position();
+
+    const auto report = chinese_chess::engine::try_search_best_move_with_pikafish(
+        position,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 4,
+            .time_budget_ms = 0,
+        });
+
+    expect(report.has_value(), "Supported middlegames should use the embedded Pikafish searcher");
+    expect(report->best_move.has_value(), "Embedded Pikafish search should return a best move");
+    expect(report->completed_depth == 4,
+           "Embedded Pikafish search should finish the requested untimed depth");
+    expect(report->visited_nodes > 500,
+           "Embedded Pikafish search should traverse a non-trivial node count");
+    expect(!report->principal_variation.empty(),
+           "Embedded Pikafish search should expose a principal variation");
+}
+
+void unsupported_pikafish_positions_are_rejected_by_search_test() {
+    const GameState unsupported_position = GameState::from_fen(
+        "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
+
+    const auto report = chinese_chess::engine::try_search_best_move_with_pikafish(
+        unsupported_position,
+        chinese_chess::engine::SearchOptions {
+            .max_depth = 3,
+            .time_budget_ms = 0,
+        });
+
+    expect(!report.has_value(),
+           "Unsupported positions should decline the embedded Pikafish path");
+
+    bool threw = false;
+    try {
+        static_cast<void>(chinese_chess::engine::search_best_move(
+            unsupported_position,
+            chinese_chess::engine::SearchOptions {
+                .max_depth = 3,
+                .time_budget_ms = 0,
+            }));
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    expect(threw, "Public search should surface unsupported Pikafish positions instead of falling back");
 }
 
 void nnue_evaluation_is_side_to_move_relative_test() {
@@ -320,22 +379,14 @@ void nnue_evaluation_rewards_simple_material_advantage_test() {
            "NNUE evaluation should reward an extra pawn in a simple endgame");
 }
 
-void unsupported_pikafish_positions_fall_back_to_legacy_evaluation_test() {
+void unsupported_pikafish_positions_keep_nnue_eval_guardrails_test() {
     const GameState unsupported_position = GameState::from_fen(
         "r1bakabnr/4c4/1cn4c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1");
 
     const int score = chinese_chess::engine::evaluate_position(unsupported_position);
-    const auto search = chinese_chess::engine::search_best_move(
-        unsupported_position,
-        chinese_chess::engine::SearchOptions {
-            .max_depth = 3,
-            .time_budget_ms = 0,
-        });
 
     expect(score > -20000 && score < 20000,
-           "Unsupported Pikafish positions should fall back to a sane non-mate evaluation");
-    expect(search.best_move.has_value(),
-           "Unsupported Pikafish positions should still be searchable through the legacy fallback path");
+            "Unsupported Pikafish positions should fall back to a sane non-mate evaluation");
 }
 
 void nnue_evaluation_still_values_connected_soldiers_in_lighter_positions_test() {
@@ -443,9 +494,11 @@ int main() {
     search_progress_callback_exposes_root_candidates_test();
     search_uses_opening_book_for_red_first_moves_test();
     search_midgame_node_budget_test();
+    embedded_pikafish_search_finishes_requested_depth_test();
+    unsupported_pikafish_positions_are_rejected_by_search_test();
     nnue_evaluation_is_side_to_move_relative_test();
     nnue_evaluation_rewards_simple_material_advantage_test();
-    unsupported_pikafish_positions_fall_back_to_legacy_evaluation_test();
+    unsupported_pikafish_positions_keep_nnue_eval_guardrails_test();
     nnue_evaluation_still_values_connected_soldiers_in_lighter_positions_test();
     browser_session_bridge_test();
     browser_session_fen_search_does_not_mutate_live_state_test();

@@ -13,16 +13,27 @@ add_library(chinese_chess_core
     src/bridge/wasm_exports.cpp
     src/core/game.cpp
     src/engine/opening_book.cpp
+    src/engine/pikafish_search.cpp
     src/engine/pikafish_nnue.cpp
     src/engine/pikafish_process.cpp
     src/engine/search.cpp
     src/engine/uci_codec.cpp
+    third_party/pikafish/src/benchmark.cpp
     third_party/pikafish/src/bitboard.cpp
+    third_party/pikafish/src/engine.cpp
     third_party/pikafish/src/memory.cpp
     third_party/pikafish/src/misc.cpp
+    third_party/pikafish/src/movepick.cpp
     third_party/pikafish/src/movegen.cpp
     third_party/pikafish/src/position.cpp
     third_party/pikafish/src/evaluate.cpp
+    third_party/pikafish/src/score.cpp
+    third_party/pikafish/src/search.cpp
+    third_party/pikafish/src/thread.cpp
+    third_party/pikafish/src/timeman.cpp
+    third_party/pikafish/src/tt.cpp
+    third_party/pikafish/src/uci.cpp
+    third_party/pikafish/src/ucioption.cpp
     third_party/pikafish/src/nnue/network.cpp
     third_party/pikafish/src/nnue/nnue_accumulator.cpp
     third_party/pikafish/src/nnue/nnue_misc.cpp
@@ -54,7 +65,8 @@ target_compile_definitions(
         CHINESE_CHESS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         NO_PREFETCH
         ZSTD_DISABLE_ASM
-)
+        DISABLE_SHARED_MEMORY
+ )
 
 add_executable(chinese_chess_cli
     src/apps/cli/main.cpp
@@ -107,6 +119,7 @@ if(EMSCRIPTEN)
             "$<$<CONFIG:Release>:-sASSERTIONS=0>"
             "$<$<CONFIG:Release>:-sSTACK_OVERFLOW_CHECK=0>"
             "-sALLOW_MEMORY_GROWTH=1"
+            "-sSTACK_SIZE=8388608"
             "-sENVIRONMENT=web,worker"
             "-sEXPORT_ES6=1"
             "-sEXPORTED_FUNCTIONS=['_malloc','_free','_chinese_chess_current_fen','_chinese_chess_legal_moves_from','_chinese_chess_current_position_status','_chinese_chess_apply_move','_chinese_chess_undo_last_move','_chinese_chess_undo_count','_chinese_chess_apply_ai_move','_chinese_chess_apply_ai_move_with_limits','_chinese_chess_apply_ai_move_with_report','_chinese_chess_search_ai_move_for_fen_with_report','_chinese_chess_reset']"
