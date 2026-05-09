@@ -106,11 +106,13 @@ make test
 这会用 CMake 配置项目、编译 C++ 核心和测试，并通过 CTest 运行全套测试。
 
 当前测试覆盖：
-- 规则引擎走法合法性、将军检测
+- 规则引擎走法合法性、将军检测（兵、马、象、炮、将帅等全兵种规则）
 - UCI 编解码（Pikafish 方言）
-- WASM 桥接层
+- 搜索引擎：捕获偏好、时间预算、搜索报告元数据、根节点候选项进度回调、开局库命中
 - 搜索引擎节点预算与搜索树压缩验证
-- 嵌入式 Pikafish 搜索回归、unsupported 局面拒绝路径与轻子残局评估回归
+- 嵌入式 Pikafish 搜索回归、unsupported 局面拒绝路径
+- Pikafish NNUE 评估：侧移相对性、物质优势奖励、连兵结构、unsupported 局面保障
+- BrowserSession 桥接层：悔棋历史、FEN 快照搜索不影响主会话状态
 
 ---
 
@@ -146,7 +148,7 @@ chinese-chess/
 ├── tests/                  # C++ 测试 + fake UCI 引擎 fixture
 ├── scripts/                # build_pikafish.sh、build_wasm.sh
 ├── third_party/
-│   └── pikafish/           # Pikafish 引擎（git 子模块）
+│   └── pikafish/           # Pikafish 引擎源码（直接内嵌，非 git submodule）
 └── .github/workflows/
     ├── ci.yml              # 原生构建 + 测试 CI
     └── pages.yml           # GitHub Pages 自动部署
@@ -163,7 +165,7 @@ chinese-chess/
 | 构建工具 | Vite 8 |
 | 棋盘渲染 | Phaser 3 |
 | 样式 | Tailwind CSS 4 |
-| 可选引擎（本地） | Pikafish（UCI 协议，git 子模块） |
+| 可选引擎（本地） | Pikafish（UCI 协议，直接内嵌源码） |
 | CI/CD | GitHub Actions + GitHub Pages |
 
 ---
@@ -212,7 +214,7 @@ rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
 
 ## 使用 Pikafish 引擎（本地）
 
-Pikafish 是专为中国象棋设计的强力引擎（基于 Stockfish 改造），以 git 子模块形式包含在本仓库中。
+Pikafish 是专为中国象棋设计的强力引擎（基于 Stockfish 改造），源码直接内嵌在 `third_party/pikafish/` 下，不依赖 git submodule。
 
 - **本地原生模式**：可直接编译原生引擎并通过 CLI 做冒烟测试
 - **浏览器部署模式**：仓库直接复用 Pikafish 的 NNUE + 搜索/裁剪代码；通过单线程适配把这套路径放进共享 WASM 运行时
