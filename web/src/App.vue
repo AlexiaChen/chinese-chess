@@ -713,11 +713,11 @@ watchEffect(() => {
 
 <template>
   <div
-    class="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(212,106,49,0.18),transparent_24%),radial-gradient(circle_at_left_bottom,rgba(135,38,28,0.18),transparent_26%),linear-gradient(180deg,#11171e,#0b0f13_44%,#07090c)] text-stone-100"
+    class="min-h-[100svh] overflow-x-hidden bg-[radial-gradient(circle_at_top_right,rgba(212,106,49,0.18),transparent_24%),radial-gradient(circle_at_left_bottom,rgba(135,38,28,0.18),transparent_26%),linear-gradient(180deg,#11171e,#0b0f13_44%,#07090c)] text-stone-100"
   >
-    <div class="mx-auto grid w-full max-w-[1500px] gap-6 px-4 py-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+    <div class="mx-auto grid w-full max-w-[1500px] gap-3 px-2 py-3 sm:gap-6 sm:px-4 sm:py-5 xl:grid-cols-[390px_minmax(0,1fr)]">
       <aside
-        class="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.06] p-7 shadow-[0_24px_80px_rgba(10,8,6,0.34)] backdrop-blur-xl"
+        class="relative order-2 overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.06] p-4 shadow-[0_24px_80px_rgba(10,8,6,0.34)] backdrop-blur-xl sm:rounded-[32px] sm:p-7 xl:order-1"
       >
         <div class="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.08),transparent_34%,transparent_72%,rgba(255,255,255,0.03))]"></div>
         <div class="relative">
@@ -851,7 +851,7 @@ watchEffect(() => {
                   </button>
                 </div>
               </div>
-              <div class="mt-3 grid gap-3 sm:grid-cols-3">
+              <div class="mt-3 hidden gap-3 xl:grid xl:grid-cols-3">
                 <button
                   type="button"
                   class="rounded-[20px] bg-[linear-gradient(135deg,#8e2e1c,#d46a31)] px-5 py-4 text-left font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base text-amber-50 shadow-[0_12px_30px_rgba(212,106,49,0.32)] transition hover:scale-[1.02]"
@@ -953,17 +953,20 @@ watchEffect(() => {
       </aside>
 
       <main
-        class="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_80px_rgba(10,8,6,0.34)] backdrop-blur-xl"
+        class="mobile-play-main relative order-1 overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] p-1.5 shadow-[0_24px_80px_rgba(10,8,6,0.34)] backdrop-blur-xl sm:rounded-[32px] sm:p-6 xl:order-2"
       >
         <div class="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.08),transparent_34%,transparent_72%,rgba(255,255,255,0.03))]"></div>
-        <div class="relative">
-          <header class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
+        <div class="mobile-play-layout relative">
+          <header class="mobile-play-heading grid gap-3 px-2 pt-2 sm:gap-6 sm:px-0 sm:pt-0 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
             <div>
-              <h2 class="mt-2 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[clamp(2rem,4vw,3rem)]">
+              <span class="font-mono text-[10px] uppercase tracking-[0.24em] text-stone-400/70 xl:hidden">
+                Chinese Chess / Xiangqi
+              </span>
+              <h2 class="mt-1 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-[clamp(1.75rem,8vw,3rem)] sm:mt-2 sm:text-[clamp(2rem,4vw,3rem)]">
                 对弈棋盘
               </h2>
             </div>
-            <p class="leading-8 text-stone-300/80">
+            <p class="mobile-play-description hidden leading-8 text-stone-300/80 sm:block">
               {{
                 aiEnabled
                   ? '选择开局先手后开始对弈；AI 的路径、评估值和搜索摘要会实时显示在左侧。'
@@ -972,7 +975,21 @@ watchEffect(() => {
             </p>
           </header>
 
-            <div class="relative">
+          <div
+            class="mobile-play-status mx-2 mt-3 grid gap-2 rounded-[18px] border border-white/10 bg-black/20 px-3 py-3 sm:mx-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:rounded-[22px] sm:px-4 xl:hidden"
+            role="status"
+            aria-live="polite"
+          >
+            <strong class="font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-base leading-6 text-stone-50 sm:text-lg">
+              {{ bridgeStatus }}
+            </strong>
+            <div class="flex flex-wrap gap-2 text-[11px] text-stone-300/75">
+              <span class="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1">{{ activeSide }}行棋</span>
+              <span class="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1">{{ modeLabel }}</span>
+            </div>
+          </div>
+
+            <div class="mobile-play-board relative">
               <div
                 v-if="battleNotification"
                 :key="battleNotification.id"
@@ -1017,6 +1034,39 @@ watchEffect(() => {
                 @fen-change="handleBoardFenChange"
                 @move-applied="handleHumanMoveApplied"
               />
+            </div>
+
+            <div
+              class="mobile-play-actions sticky bottom-2 z-20 mx-1 mt-2 grid grid-cols-3 gap-2 rounded-[18px] border border-white/10 bg-[#11171e]/90 p-2 shadow-[0_14px_36px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:mx-0 sm:mt-3 sm:rounded-[22px] sm:p-3 xl:hidden"
+              aria-label="棋局快捷操作"
+            >
+              <button
+                type="button"
+                class="min-h-12 rounded-[14px] bg-[linear-gradient(135deg,#8e2e1c,#d46a31)] px-2 py-2 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-sm text-amber-50 shadow-[0_8px_20px_rgba(212,106,49,0.24)] sm:text-base"
+                @click="resetBoard"
+              >
+                重置
+              </button>
+              <button
+                type="button"
+                class="min-h-12 rounded-[14px] border px-2 py-2 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-sm sm:text-base"
+                :class="
+                  canUndo
+                    ? 'border-emerald-200/25 bg-emerald-300/10 text-emerald-50'
+                    : 'border-white/10 bg-black/20 text-stone-500'
+                "
+                :disabled="!canUndo"
+                @click="undoBoard"
+              >
+                {{ undoButtonLabel }}
+              </button>
+              <button
+                type="button"
+                class="min-h-12 rounded-[14px] border border-white/15 bg-white/[0.06] px-2 py-2 font-[KaiTi,_Kaiti_SC,_STKaiti,_serif] text-sm text-stone-100 sm:text-base"
+                @click="toggleAi"
+              >
+                {{ aiEnabled ? '关闭 AI' : '开启 AI' }}
+              </button>
             </div>
         </div>
       </main>
