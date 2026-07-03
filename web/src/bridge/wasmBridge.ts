@@ -79,15 +79,25 @@ interface EmscriptenModuleFactory {
 }
 
 export async function createWasmBridge(): Promise<BrowserBridge> {
-  const wasmEntrypoint = `${import.meta.env.BASE_URL}wasm/chinese_chess_wasm.js`
-  const wasmAssetBase = new URL(`${import.meta.env.BASE_URL}wasm/`, globalThis.location.href).toString()
+  const wasmVersion = import.meta.env.VITE_WASM_VERSION?.trim()
+  const wasmAssetBase = new URL(`${import.meta.env.BASE_URL}wasm/`, globalThis.location.href)
+
+  function resolveWasmAsset(path: string) {
+    const url = new URL(path, wasmAssetBase)
+    if (wasmVersion) {
+      url.searchParams.set('v', wasmVersion)
+    }
+    return url.toString()
+  }
+
+  const wasmEntrypoint = resolveWasmAsset('chinese_chess_wasm.js')
   const moduleFactory = (await import(
     /* @vite-ignore */ wasmEntrypoint
   )) as EmscriptenModuleFactory
 
   const runtime = await moduleFactory.default({
     locateFile(path) {
-      return new URL(path, wasmAssetBase).toString()
+      return resolveWasmAsset(path)
     },
   })
 

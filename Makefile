@@ -132,7 +132,19 @@ web-bundle: configure
 	cmake --build $(BUILD_DIR) --config $(BUILD_TYPE) --target web_bundle
 
 pages-build: wasm-release
-	VITE_BASE_PATH=$(PAGES_BASE_PATH) npm run build --prefix $(WEB_DIR)
+	@set -eu; \
+	wasm_version="$$(sha256sum \
+		$(WEB_DIR)/public/wasm/chinese_chess_wasm.js \
+		$(WEB_DIR)/public/wasm/chinese_chess_wasm.wasm \
+		$(WEB_DIR)/public/wasm/chinese_chess_wasm.data \
+		| sha256sum | cut -c1-16)"; \
+	printf 'WASM asset version: %s\n' "$$wasm_version"; \
+	VITE_BASE_PATH=$(PAGES_BASE_PATH) VITE_WASM_VERSION="$$wasm_version" npm run build --prefix $(WEB_DIR); \
+	versioned_chunks="$$(grep -l "$$wasm_version" $(WEB_DIR)/dist/assets/*.js | wc -l)"; \
+	if [[ "$$versioned_chunks" -lt 2 ]]; then \
+		echo 'Pages bundle is missing the WASM version in the main or Worker chunk' >&2; \
+		exit 1; \
+	fi
 
 clean:
 	rm -rf $(BUILD_DIR) build-wasm $(WEB_DIR)/dist

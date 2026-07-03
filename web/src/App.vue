@@ -600,7 +600,8 @@ onMounted(async () => {
     syncFromBridge()
     refreshBridgeStatus()
   } catch (error) {
-    bridgeStatus.value = '规则模块加载失败，请刷新页面后重试。'
+    console.error('规则模块加载失败', error)
+    bridgeStatus.value = '规则模块加载失败，请检查网络或清除本站缓存后重试。'
   }
 })
 
