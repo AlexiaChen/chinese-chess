@@ -111,6 +111,16 @@ if(EMSCRIPTEN)
 
     set_target_properties(chinese_chess_wasm PROPERTIES OUTPUT_NAME "chinese_chess_wasm")
 
+    set(
+        CHINESE_CHESS_EMSCRIPTEN_TEXT_DECODER_COMPAT
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/emscripten_text_decoder_compat.js"
+    )
+    set_property(
+        TARGET chinese_chess_wasm
+        APPEND
+        PROPERTY LINK_DEPENDS "${CHINESE_CHESS_EMSCRIPTEN_TEXT_DECODER_COMPAT}"
+    )
+
     target_link_options(
         chinese_chess_wasm
         PRIVATE
@@ -124,6 +134,7 @@ if(EMSCRIPTEN)
             "-sEXPORT_ES6=1"
             "-sEXPORTED_FUNCTIONS=['_malloc','_free','_chinese_chess_current_fen','_chinese_chess_legal_moves_from','_chinese_chess_current_position_status','_chinese_chess_apply_move','_chinese_chess_undo_last_move','_chinese_chess_undo_count','_chinese_chess_apply_ai_move','_chinese_chess_apply_ai_move_with_limits','_chinese_chess_apply_ai_move_with_report','_chinese_chess_search_ai_move_for_fen_with_report','_chinese_chess_reset']"
             "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','ccall','cwrap','lengthBytesUTF8','stringToUTF8']"
+            "SHELL:--pre-js ${CHINESE_CHESS_EMSCRIPTEN_TEXT_DECODER_COMPAT}"
             "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pikafish/src/pikafish.nnue@/pikafish.nnue"
             "-sMODULARIZE=1"
             "-sNO_EXIT_RUNTIME=1"

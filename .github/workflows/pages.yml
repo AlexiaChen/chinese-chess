@@ -30,10 +30,15 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
+      - name: Read pinned Emscripten version
+        id: emscripten-version
+        shell: bash
+        run: echo "version=$(<.emscripten-version)" >> "$GITHUB_OUTPUT"
+
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: latest
+          version: ${{ steps.emscripten-version.outputs.version }}
 
       - name: Install frontend dependencies
         run: npm ci --prefix web

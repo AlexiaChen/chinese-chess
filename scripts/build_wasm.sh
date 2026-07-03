@@ -6,6 +6,7 @@ BUILD_TYPE="${BUILD_TYPE:-Release}"
 BUILD_TYPE_LOWER="$(printf '%s' "${BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')"
 BUILD_DIR="${WASM_BUILD_DIR:-${ROOT_DIR}/build-wasm/${BUILD_TYPE_LOWER}}"
 PUBLIC_WASM_DIR="${ROOT_DIR}/web/public/wasm"
+REQUIRED_EMSCRIPTEN_VERSION="$(<"${ROOT_DIR}/.emscripten-version")"
 
 if ! command -v emcc >/dev/null 2>&1 || ! command -v emcmake >/dev/null 2>&1; then
   EMSDK_DIR="${EMSDK_DIR:-$HOME/.local/emsdk}"
@@ -19,10 +20,20 @@ if ! command -v emcc >/dev/null 2>&1 || ! command -v emcmake >/dev/null 2>&1; th
   source "${EMSDK_DIR}/emsdk_env.sh" >/dev/null
 fi
 
+EMCC_VERSION_OUTPUT="$(emcc --version)"
+if [[ "${EMCC_VERSION_OUTPUT}" != *" ${REQUIRED_EMSCRIPTEN_VERSION} "* ]]; then
+  echo "Emscripten ${REQUIRED_EMSCRIPTEN_VERSION} is required by .emscripten-version" >&2
+  echo "Detected: ${EMCC_VERSION_OUTPUT%%$'\n'*}" >&2
+  exit 1
+fi
+
 emcmake cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
   -DCHINESE_CHESS_BUILD_TESTS=OFF \
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
 cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --target chinese_chess_wasm
+
+node "${ROOT_DIR}/scripts/verify_wasm_text_decoder_compat.mjs" \
+  "${BUILD_DIR}/chinese_chess_wasm.js"
 
 mkdir -p "${PUBLIC_WASM_DIR}"
 cp "${BUILD_DIR}/chinese_chess_wasm.js" "${PUBLIC_WASM_DIR}/"

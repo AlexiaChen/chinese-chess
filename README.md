@@ -41,7 +41,7 @@
 | CMake | ≥ 3.20 |
 | C++ 编译器 | 支持 C++20（GCC 11+、Clang 13+） |
 | Node.js | ≥ 22 |
-| Emscripten | 任意新版本（仅构建 WASM 时需要） |
+| Emscripten | 5.0.6（仅构建 WASM 时需要，以 `.emscripten-version` 为唯一版本源） |
 | Python 3 | 任意版本（仅运行测试 fixture 时需要） |
 
 ### 1. 克隆仓库
@@ -66,6 +66,8 @@ make wasm
 > **说明**：`third_party/pikafish` 现已直接作为仓库内源码维护，不再依赖 git submodule。
 
 > **注意**：WASM 目标编译时启用了 `-sENVIRONMENT=web,worker`，以支持在 Web Worker 内加载模块。
+
+> **Edge 兼容**：构建会在 Emscripten 模块内部包装 `TextDecoder`，先把 WASM 内存视图复制为固定长度缓冲区，以兼容会将增长内存暴露为 resizable `ArrayBuffer`、但解码器仍拒绝该视图的 Edge 版本。
 
 ### 3. 启动前端开发服务器
 
