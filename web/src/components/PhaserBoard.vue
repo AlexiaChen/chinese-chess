@@ -353,10 +353,10 @@ watch(
 
 <template>
   <section
-    class="mt-3 rounded-[20px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(7,9,12,0.5)] p-1 sm:mt-6 sm:rounded-[28px] sm:p-4"
+    class="mt-6 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(7,9,12,0.5)] p-4"
   >
-    <div class="relative mx-auto aspect-[43/49] w-full max-w-[860px] overflow-hidden rounded-[16px] sm:rounded-[24px]">
-      <div ref="container" class="xiangqi-board-canvas h-full w-full overflow-hidden rounded-[16px] sm:rounded-[24px]"></div>
+    <div class="relative mx-auto w-full max-w-[860px] overflow-hidden rounded-[24px]">
+      <div ref="container" class="min-h-[480px] w-full overflow-hidden rounded-[24px]"></div>
 
       <svg
         v-if="highlightOverlay"
@@ -406,7 +406,7 @@ watch(
                 ? 'border-white/0 bg-transparent hover:border-amber-200/45 hover:bg-amber-100/5'
                 : 'border-white/0 bg-transparent'
           "
-          :style="percentStyle(overlay.displayFile, overlay.displayRank, '10%', '8.2%')"
+          :style="percentStyle(overlay.displayFile, overlay.displayRank, '8.8%', '7.2%')"
           @click="handlePieceClick(overlay)"
         >
           <span class="sr-only">{{ overlay.label }}</span>
@@ -418,11 +418,10 @@ watch(
           :aria-label="`落子 ${overlay.move}`"
           :data-move="overlay.move"
           :disabled="props.interactionLocked"
-          class="absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-transparent bg-transparent text-[0px] transition hover:scale-110"
-          :style="percentStyle(overlay.displayFile, overlay.displayRank, '10%', '8.2%')"
+          class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100/80 bg-orange-500/85 text-[0px] shadow-[0_0_0_5px_rgba(249,115,22,0.18)] transition hover:scale-110"
+          :style="percentStyle(overlay.displayFile, overlay.displayRank, '3.8%', '3.4%')"
           @click="handleMoveClick(overlay.move)"
         >
-          <span class="block aspect-square w-[34%] min-w-2.5 rounded-full border border-amber-100/80 bg-orange-500/90 shadow-[0_0_0_5px_rgba(249,115,22,0.18)]"></span>
           落子 {{ overlay.target }}
         </button>
 
@@ -432,24 +431,24 @@ watch(
           :data-thinking-move="thinkingOverlay.move"
           :data-thinking-square="thinkingOverlay.square"
           class="pointer-events-none absolute z-[12] -translate-x-1/2 -translate-y-1/2 rounded-lg border-4 border-emerald-300/95 bg-emerald-300/10 shadow-[0_0_0_6px_rgba(16,185,129,0.22),0_0_28px_rgba(110,231,183,0.35)] animate-pulse"
-          :style="percentStyle(thinkingOverlay.displayFile, thinkingOverlay.displayRank, '10%', '8.2%')"
+          :style="percentStyle(thinkingOverlay.displayFile, thinkingOverlay.displayRank, '8.8%', '7.2%')"
         ></div>
       </div>
     </div>
 
-    <div class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-2 sm:mt-4 sm:gap-3 sm:px-4 sm:py-3">
-      <p class="min-w-0 flex-1 text-xs leading-6 text-stone-200/85 sm:text-sm sm:leading-7">
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3">
+      <p class="text-sm leading-7 text-stone-200/85">
         {{ interactionHint }}
       </p>
-      <div class="ml-auto flex flex-wrap justify-end gap-1.5 sm:gap-2">
+      <div class="flex flex-wrap gap-2">
         <span
           v-if="selectedSquare"
-          class="rounded-full border border-amber-300/25 bg-amber-400/10 px-2.5 py-1 font-mono text-[11px] tracking-wide text-amber-100/85 sm:px-3 sm:text-xs"
+          class="rounded-full border border-amber-300/25 bg-amber-400/10 px-3 py-1 font-mono text-xs tracking-wide text-amber-100/85"
         >
           已选 {{ selectedSquare }}
         </span>
         <span
-          class="rounded-full border border-white/8 bg-black/20 px-2.5 py-1 font-mono text-[11px] tracking-wide text-stone-300/70 sm:px-3 sm:text-xs"
+          class="rounded-full border border-white/8 bg-black/20 px-3 py-1 font-mono text-xs tracking-wide text-stone-300/70"
         >
           合法着法 {{ legalMoves.length }}
         </span>
