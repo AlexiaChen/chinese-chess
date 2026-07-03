@@ -95,8 +95,6 @@ make fake-engine-smoke  # 用内置假引擎做冒烟测试
 make clean              # 清除所有构建产物
 ```
 
-`pages-build` 会根据 `chinese_chess_wasm.js/.wasm/.data` 的内容生成统一版本号，并将其加入主线程和 Worker 的资源 URL。这样部署新版本后，浏览器不会从缓存中混用不同批次的 WASM 胶水代码、二进制与 NNUE 数据文件。
-
 ---
 
 ## 运行测试
